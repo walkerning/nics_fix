@@ -42,7 +42,7 @@ def _quantitize_grad(data, grad_fixed_scale, grad_cfg, name=None):
         # TODO: Need strategy abstraction to handle this grad. Many ways to handle grad,
         #       like adding random noise, saving grads into a random buffer and so on.
         # Here is the default handling. just call `_quantize_cfg`.
-        input_grad = _quantitize_cfg(output_grad, grad_fixed_scale, grad_cfg.config, grad_cfg.bit_width, name=name)
+        input_grad = _quantitize_cfg(output_grad, grad_fixed_scale, grad_cfg.training, grad_cfg.bit_width, name=name)
         # Do not need to record the modified gradients here. because the gradients can be found in grads_and_vars directly.
         # TODO: maybe should record `output_grad` for debug use.
         # tf.add_to_collection(FIXED_GRAD_COL_KEY, input_grad)

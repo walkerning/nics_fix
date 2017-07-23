@@ -10,6 +10,8 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 import nics_fix as nf
 
+FLAGS = None
+
 def main(_):
     # Import data
     mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
@@ -19,7 +21,11 @@ def main(_):
     # Define loss and optimizer
     y_ = tf.placeholder(tf.float32, [None, 10])
 
-    with nf.fixed_scope("fixed_mlp_mnist", nf.parse_cfg_from_str("")) as (s, training):
+    cfgs = nf.parse_cfg_from_str("")
+    if FLAGS.cfg is not None:
+        cfgs = nf.parse_cfg_from_file(FLAGS.cfg)
+
+    with nf.fixed_scope("fixed_mlp_mnist", cfgs) as (s, training):
         training_placeholder = training
         res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10)
 
@@ -44,10 +50,12 @@ def main(_):
                                         y_: mnist.test.labels,
                                         training_placeholder: False}))
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, default='/tmp/tensorflow/mnist/input_data',
-                        help='Directory for storing input data')
+    parser.add_argument("--data_dir", type=str, default="/tmp/tensorflow/mnist/input_data",
+                        help="Directory for storing input data")
+    parser.add_argument("--cfg", type=str, default=None,
+                        help="The file for fixed configration.")
     FLAGS, unparsed = parser.parse_known_args()
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
 

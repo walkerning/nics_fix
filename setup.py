@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 from setuptools import setup, find_packages
+from setuptools.command.test import test as TestCommand
 
 here = os.path.dirname(os.path.abspath((__file__)))
 
@@ -14,13 +16,15 @@ EMAIL = "foxdoraame@gmail.com"
 
 # package contents
 MODULES = []
-PACKAGES = find_packages()
+PACKAGES = find_packages(exclude=["tests.*", "tests"])
 
 # dependencies
 INSTALL_REQUIRES = [
     "pyyaml==3.12"
 ]
-TESTS_REQUIRE = []
+TESTS_REQUIRE = [
+    "pytest"
+]
 
 # entry points
 ENTRY_POINTS = """"""
@@ -30,6 +34,19 @@ def read_long_description(filename):
     if os.path.exists(path):
         return open(path).read()
     return ""
+
+
+class PyTest(TestCommand):
+    def finalize_options(self):
+        TestCommand.finalize_options(self)
+        self.test_args = ['tests/', '--junitxml', 'unittest.xml']
+        self.test_suite = True
+
+    def run_tests(self):
+        # import here, cause outside the eggs aren't loaded
+        import pytest
+        errno = pytest.main(self.test_args)
+        sys.exit(errno)
 
 setup(
     name=NAME,
@@ -46,4 +63,5 @@ setup(
     zip_safe=True,
     install_requires=INSTALL_REQUIRES,
     tests_require=TESTS_REQUIRE,
+    cmdclass={'test': PyTest},
 )
