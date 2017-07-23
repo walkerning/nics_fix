@@ -9,8 +9,17 @@ import tensorflow as tf
 
 from nics_fix.config import FixedConfigs
 
-__all__ = ["get_context", "fixed_scope", "FIXED_CONFIG_KEY"]
+__all__ = ["get_context", "fixed_scope", "FIXED_CONFIG_KEY",
+           "FIXED_DATA_SCALE_COL_KEY", "FIXED_GRAD_SCALE_COL_KEY",
+           "FIXED_DATA_COL_KEY", "FIXED_GRAD_COL_KEY"]
 
+# Some collection key for tensorflow collections
+FIXED_DATA_COL_KEY = "nf_fix_data"
+FIXED_DATA_SCALE_COL_KEY = "nf_fix_data_scales"
+FIXED_GRAD_COL_KEY = "nf_fix_grad"
+FIXED_GRAD_SCALE_COL_KEY = "nf_fix_grad_scales"
+
+# Context used by fixed scope
 _context = {}
 
 FIXED_CONFIG_KEY = "__fixed_config"

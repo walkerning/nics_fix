@@ -21,8 +21,7 @@ def main(_):
 
     with nf.fixed_scope("fixed_mlp_mnist", nf.parse_cfg_from_str("")) as (s, training):
         training_placeholder = training
-        #res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10)
-        res = nf.wrap(x).Dense(units=10)
+        res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10)
 
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=res.tensor))

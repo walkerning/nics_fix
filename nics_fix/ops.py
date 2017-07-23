@@ -47,13 +47,22 @@ def fixed_register(inner_func, type_name, default_config=default_fix_config):
         name = kwargs.get("name", None)
         weight_cfg, act_cfg = cfg.lookup(name, type_name)
         cur_scope = tf.get_variable_scope()
-        # FIXME: I don't know why. The name of layers cannot be uniqued automatically within this context... As the build of Tensorflow takes time, I will debug this issue later on.
-        kwargs["name"] = tf.get_default_graph().unique_name(name if name else type_name)
-        kwargs["name"] = kwargs["name"][kwargs["name"].rfind("/", 1) + 1:]
-        with tf.variable_scope(cur_scope, custom_getter=map_variables(partial(quantitize, cfg=weight_cfg))):
+        # FIXME: I don't know why. The name of layers cannot be uniqued automatically within this context...
+        # As a temporary fix, I call unique_name manually here. 
+        # As the build of Tensorflow takes time, I will debug this issue later.
+        # And call this `unique_name` will result in `Dense` and `Dense_2`, expected `Dense` and `Dense_1`... To be debug...
+        scope_name = tf.get_default_graph().unique_name(name if name else type_name)
+        scope_name = scope_name[scope_name.rfind("/", 1)+1:]
+        with tf.variable_scope(scope_name) as s:
+            print("scope name: ", s.name, s.original_name_scope)
+            #with tf.variable_scope(cur_scope) as s, tf.name_scope(s.original_name_scope):
+            custom_getter = map_variables(partial(quantitize, cfg=weight_cfg, name=name, scope=s))
+            s.set_custom_getter(custom_getter)
             res = inner_func(*args, **kwargs)
-        res = _Holder(quantitize(res, act_cfg, scope=kwargs.get("name", None), name="activation"))
+            s.set_custom_getter(None)
+            res = _Holder(quantitize(res, act_cfg, name="activation"))
         return res
+
     # Register this fixed op
     fixed_ops_registry.register(_true_func, type_name)
     FixedConfigs.register_default(type_name, default_config)
