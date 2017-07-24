@@ -2,6 +2,7 @@
 
 from __future__ import print_function
 
+import logging
 from functools import wraps, partial
 
 import tensorflow as tf
@@ -11,7 +12,6 @@ from nics_fix.config import FixedConfigs, default_fix_config
 from nics_fix.context import get_context, FIXED_CONFIG_KEY
 from nics_fix.quant import quantitize
 
-
 __all__ = ["fixed_register", "wrap"]
 
 fixed_ops_registry = Registry("fixed ops")
@@ -19,6 +19,9 @@ fixed_ops_registry = Registry("fixed ops")
 class _Holder(tf.Tensor):
     def __init__(self, tensor):
         self._tensor = tensor
+
+    def apply(self, func):
+        return _Holder(func(self._tensor))
 
     def __getattr__(self, name):
         if name in fixed_ops_registry.list():
@@ -38,6 +41,15 @@ def map_variables(func):
         return func(getter(*args, **kwargs))
     return _custom_getter
 
+def _recursive_eval(lst, func, type_check=None):
+    if isinstance(lst, (list, tuple)):
+        return [_recursive_eval(item, func, type_check) for item in lst]
+    if type_check:
+        if not isinstance(lst, type_check):
+            raise TypeError("Type check failed in `_recursive_eval`: expected type {}, got type {}"\
+                            .format(type_check, type(lst)))
+    return func(lst)
+
 def fixed_register(inner_func, type_name, default_config=default_fix_config):
     @wraps(inner_func)
     def _true_func(*args, **kwargs):
@@ -54,20 +66,16 @@ def fixed_register(inner_func, type_name, default_config=default_fix_config):
         scope_name = tf.get_default_graph().unique_name(name if name else type_name)
         scope_name = scope_name[scope_name.rfind("/", 1)+1:]
         with tf.variable_scope(scope_name) as s:
-            print("scope name: ", s.name, s.original_name_scope)
+            logging.debug("scope name: {}, original name scope: {}".format(s.name, s.original_name_scope))
             #with tf.variable_scope(cur_scope) as s, tf.name_scope(s.original_name_scope):
             custom_getter = map_variables(partial(quantitize, cfg=weight_cfg, name=name, scope=s))
             s.set_custom_getter(custom_getter)
             res = inner_func(*args, **kwargs)
             s.set_custom_getter(None)
-            res = _Holder(quantitize(res, act_cfg, name="activation"))
+            res = _recursive_eval(res, lambda x: _Holder(quantitize(x, act_cfg, name="activation")), type_check=tf.Tensor)
         return res
 
     # Register this fixed op
     fixed_ops_registry.register(_true_func, type_name)
     FixedConfigs.register_default(type_name, default_config)
     return _true_func
-
-fixed_register(tf.layers.conv2d, "Conv2d")
-fixed_register(tf.layers.dense, "Dense")
-fixed_register(tf.nn.relu, "ReLU")

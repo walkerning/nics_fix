@@ -27,10 +27,13 @@ def main(_):
 
     with nf.fixed_scope("fixed_mlp_mnist", cfgs) as (s, training):
         training_placeholder = training
-        res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10)
+        # Using chaining writing scale:
+        res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10).tensor
+        # Alternatively, you can use the normal writing style:
+        # res = nf.Dense(nf.ReLU(nf.Dense(x, units=100)), units=10)
 
     cross_entropy = tf.reduce_mean(
-        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=res.tensor))
+        tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=res))
     optimizer = tf.train.GradientDescentOptimizer(0.5)
     grads_and_vars = optimizer.compute_gradients(cross_entropy)
     train_step = optimizer.apply_gradients(grads_and_vars)
@@ -44,7 +47,7 @@ def main(_):
         sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys, training_placeholder: True})
 
     # Test trained model
-    correct_prediction = tf.equal(tf.argmax(res.tensor, 1), tf.argmax(y_, 1))
+    correct_prediction = tf.equal(tf.argmax(res, 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     print(sess.run(accuracy, feed_dict={x: mnist.test.images,
                                         y_: mnist.test.labels,

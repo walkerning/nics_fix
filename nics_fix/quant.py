@@ -2,6 +2,8 @@
 
 from __future__ import print_function
 
+import logging
+
 import tensorflow as tf
 import numpy as np
 
@@ -96,9 +98,9 @@ def quantitize(data, cfg, name=None, scope=None):
         with tf.name_scope(sc.original_name_scope):
             sc.set_custom_getter(None)
             data_basename, ind = _get_basename(data)
-            prefix_name = name if name else "{}_{}".format(data_basename, ind)
+            prefix_name = "{}_{}".format(name if name else data_basename, ind)
             # TODO: Change to use logging module
-            print("Quantitze data {} using cfg: {}".format(prefix_name, cfg))
+            logging.info("Quantitze data {} using cfg: {}".format(prefix_name, cfg))
             data_fixed_scale = tf.get_variable(prefix_name + "_data_fixed_scale", shape=(), dtype=tf.float32,
                                                trainable=False, initializer=tf.constant_initializer(0))
             grad_fixed_scale = tf.get_variable(prefix_name + "_grad_fixed_scale", shape=(), dtype=tf.float32,
