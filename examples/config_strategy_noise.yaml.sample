@@ -1,0 +1,15 @@
+by_type:
+  Dense:
+    name: noise_strategy
+    weight:
+      gradient_config:
+        post: 
+          type: uniform_ratio
+          min: -0.5
+          max: 0.5
+    activation:
+      gradient_config:
+        post: 
+          type: uniform_ratio
+          min: -0.5
+          max: 0.5

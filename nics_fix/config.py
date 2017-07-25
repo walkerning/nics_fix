@@ -6,7 +6,7 @@ import yaml
 
 __all__ = ["DataConfig", "GradientConfig", "FixedConfig", "FixedConfigs", "parse_cfg_from_str", "parse_cfg_from_file"]
 
-available_configs = {"auto", "fixed", None}
+available_configs = {"auto", "fixed", "none", None}
 
 def _check_legal_config(cfg):
     assert cfg in available_configs or isinstance(cfg, int), "Illegal configuration item: `{}`. Only accept integers or one of {}".format(cfg, available_configs)
@@ -116,6 +116,3 @@ class FixedConfigs(object):
 
 parse_cfg_from_str = FixedConfigs.parse_cfg_from_str
 parse_cfg_from_file = FixedConfigs.parse_cfg_from_file
-
-
-

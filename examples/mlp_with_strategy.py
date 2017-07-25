@@ -22,10 +22,14 @@ def main(_):
     y_ = tf.placeholder(tf.float32, [None, 10])
 
     cfgs = nf.parse_cfg_from_str("")
+    s_cfgs = nf.parse_strategy_cfg_from_str("")
+
     if FLAGS.cfg is not None:
         cfgs = nf.parse_cfg_from_file(FLAGS.cfg)
+    if FLAGS.scfg is not None:
+        s_cfgs = nf.parse_strategy_cfg_from_file(FLAGS.scfg)
 
-    with nf.fixed_scope("fixed_mlp_mnist", cfgs) as (s, training):
+    with nf.fixed_scope("fixed_mlp_mnist", cfgs, s_cfgs) as (s, training):
         training_placeholder = training
         # Using chaining writing style:
         res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10).tensor
@@ -59,6 +63,8 @@ if __name__ == "__main__":
                         help="Directory for storing input data")
     parser.add_argument("--cfg", type=str, default=None,
                         help="The file for fixed configration.")
+    parser.add_argument("--scfg", type=str, default=None,
+                        help="The file for strategy configration.")
     FLAGS, unparsed = parser.parse_known_args()
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
 
