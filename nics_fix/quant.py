@@ -27,16 +27,19 @@ def _quantitize_data(data, data_fixed_scale, data_cfg, name=None, pre_data=None,
     base_name, _ = _get_basename(data)
     base_name = name if name else base_name
 
-    if pre_data is not None:
-        training_data = pre_data(data, data_fixed_scale)
-    training_out_data = _quantitize_cfg(data, data_fixed_scale, data_cfg.training, data_cfg.bit_width)
-    if post_data is not None:
-        training_out_data = post_data(training_out_data, data_fixed_scale)
+    # Must do this for using `pre/post_data` in the lambda expression below.
+    if pre_data is None:
+        pre_data = lambda d, s: d
+    if post_data is None:
+        post_data = lambda d, s: d
 
-    out_data = tf.where(training,
-                        training_out_data,
-                        _quantitize_cfg(data, data_fixed_scale, data_cfg.not_training, data_cfg.bit_width),
-                        name="{}_select".format(base_name))
+    # tf.control_flow_ops.cond: conditional execution applies only to the operations defined in `true_fn` and `false_fn`
+    out_data = tf.cond(training,
+                       lambda: post_data(_quantitize_cfg(pre_data(data, data_fixed_scale), data_fixed_scale,
+                                                         data_cfg.training, data_cfg.bit_width), data_fixed_scale),
+                       lambda: _quantitize_cfg(data, data_fixed_scale, data_cfg.not_training, data_cfg.bit_width),
+                       name="{}_select".format(base_name))
+
     tf.add_to_collection(FIXED_DATA_COL_KEY, out_data)
     return out_data
 
@@ -111,7 +114,8 @@ def quantitize(data, cfg, name=None, scope=None, strategies=None, data_type="wei
     scope = scope or tf.get_variable_scope()
     with tf.variable_scope(scope) as sc:
         # Very mysterious, in https://www.tensorflow.org/versions/r0.12/how_tos/variable_scope/:
-        # > When opening a variable scope using a captured object instead of a string, we do not alter the current name scope for ops.
+        # > When opening a variable scope using a captured object instead of a string,
+        # > we do not alter the current name scope for ops.
         with tf.name_scope(sc.original_name_scope):
             sc.set_custom_getter(None)
             data_basename, ind = _get_basename(data)
