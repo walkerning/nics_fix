@@ -13,6 +13,7 @@ import sys
 import time
 import pickle
 import argparse
+import subprocess
 import numpy as np
 from datetime import datetime
 
@@ -26,7 +27,7 @@ import nics_fix as nf
 FLAGS = None
 
 def main(_):
-    batch_size = 64
+    batch_size = FLAGS.batch_size # default to 64
     num_classes = 10
 
     num_predictions = 20
@@ -171,6 +172,9 @@ def main(_):
         # End training
 
         if FLAGS.train_dir:
+            if not os.path.exists(FLAGS.train_dir):
+                subprocess.check_call("mkdir -p {}".format(FLAGS.train_dir),
+                                      shell=True)
             print("Saved model to: ", saver.save(sess, FLAGS.train_dir))
     
     # # Load label names to use in prediction results
@@ -185,7 +189,7 @@ def main(_):
     #     labels = pickle.load(f)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--train_dir", type=str, default="",
                         help="Directory for storing snapshots")
     parser.add_argument("--cfg", type=str, default=None,
@@ -195,6 +199,8 @@ if __name__ == "__main__":
                         "after every N epochs.")
     parser.add_argument("--epochs", type=int, default=200,
                         help="The max training epochs")
+    parser.add_argument("--batch_size", type=int, default=64,
+                        help="The training/testing batch size.")
     FLAGS, unparsed = parser.parse_known_args()
     if not FLAGS.train_dir:
         print("WARNING: model will not be saved if `--train_dir` option is not given.")
