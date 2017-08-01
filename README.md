@@ -62,13 +62,17 @@ You can nested multiple strategies, the first strategy's `pre_*` methods will be
 Examples
 ------------
 
-See `examples/mlp.py` for a simple example of a 1-hidden-layer fixed-point MLP tested on Mnist. 
+### Configurations
 
-See `examples/config_fix_wag.yaml.sample` for a example of fixed-point configuration.
+* See `examples/config_fix_wag.yaml.sample` for a example of fixed-point configuration.
+* See `examples/config_strategy_noise.yaml.sample` for a example of strategy configuration, using the pre-defined `NoiseStrategy`.
 
-See `examples/config_strategy_noise.yaml.sample` for a example of strategy configuration, using the pre-defined `NoiseStrategy`.
+### Datasets
 
-Try `python mlp.py --cfg config_fix_wag.yaml.sample`.
+* See `examples/mnist/mlp.py` for a simple example of a shallow fixed-point MLP on Mnist. 
+* See `examples/cifar10/cifar10_train.py` for an example of a simple fixed-point CNN on Cifar10.
+
+Try `cd examples/mnist && python mlp.py --cfg ../config_fix_wag.yaml.sample`.
 
 Other
 ------------
@@ -76,3 +80,9 @@ Other
 ### Logging
 
 Use the environment variable `NICS_FIX_LOGLEVEL` to control the python logging module. Avaiable log levels are `{"debug", "info", "warning", "error", "fatal"}`. By default, the log level is set to "warning".
+
+### Saving Fixed Model
+
+Use `nf.fixed_model_saver(fixed_mapping)` to get a patched `tf.train.Saver` to save fixed model. Usually, the argument `fixed_mapping` should be the one yield by the `nf.fixed_scope` context manager.
+
+See `examples/mnist/mlp.py` for an example of saving fixed model, and `examples/mnist/mlp_eval.py` for an example of loading a saved fixed model and run evaluation only.
