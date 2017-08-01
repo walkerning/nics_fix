@@ -8,6 +8,7 @@ from functools import wraps, partial
 import tensorflow as tf
 from tensorflow.python.framework.registry import Registry
 
+from nics_fix.consts import DataTypes
 from nics_fix.config import FixedConfigs, default_fix_config
 from nics_fix.context import get_context, FIXED_CONFIG_KEY, FIXED_STRATEGY_CONFIG_KEY
 from nics_fix.quant import quantitize
@@ -76,18 +77,18 @@ def fixed_register(inner_func, type_name, default_config=default_fix_config):
             logging.debug("scope name: {}, original name scope: {}".format(s.name, s.original_name_scope))
             #with tf.variable_scope(cur_scope) as s, tf.name_scope(s.original_name_scope):
             if strategy_cfg is None:
-                custom_getter = map_variables(partial(quantitize, cfg=weight_cfg, name=name, scope=s))
+                custom_getter = map_variables(partial(quantitize, cfg=weight_cfg, scope=s, data_type=DataTypes.WEIGHT))
             else:
-                custom_getter = map_variables(partial(quantitize, cfg=weight_cfg, name=name, scope=s,
-                                                      strategies=strategies, data_type="weight"))
+                custom_getter = map_variables(partial(quantitize, cfg=weight_cfg, scope=s,
+                                                      strategies=strategies, data_type=DataTypes.WEIGHT))
             s.set_custom_getter(custom_getter)
             res = inner_func(*args, **kwargs)
             s.set_custom_getter(None)
             if strategy_cfg is None:
-                res = _recursive_eval(res, lambda x: _Holder(quantitize(x, act_cfg, name="activation")), type_check=tf.Tensor)
+                res = _recursive_eval(res, lambda x: _Holder(quantitize(x, act_cfg, name="activation", data_type=DataTypes.ACTIVATION)), type_check=tf.Tensor)
             else:
                 res = _recursive_eval(res, lambda x: _Holder(quantitize(x, act_cfg, name="activation",
-                                                                        strategies=strategies, data_type="activation")),
+                                                                        strategies=strategies, data_type=DataTypes.ACTIVATION)),
                                       type_check=tf.Tensor)
         return res
 

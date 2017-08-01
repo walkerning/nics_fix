@@ -7,8 +7,8 @@ import logging
 import tensorflow as tf
 import numpy as np
 
-from nics_fix.context import get_context, TRAINING_PLACEHOLDER_KEY, FIXED_DATA_COL_KEY,\
-    FIXED_GRAD_COL_KEY, FIXED_DATA_SCALE_COL_KEY, FIXED_GRAD_SCALE_COL_KEY
+from nics_fix.context import get_context, TRAINING_PLACEHOLDER_KEY
+from nics_fix.consts import FixedKeys, DataTypes, _get_fixed_key
 from nics_fix.strategy import Strategies
 
 __all__ = ["quantitize"]
@@ -22,7 +22,7 @@ def _get_basename(data, full=False):
         basename, ind = basename.split(":")
         return basename, ind
 
-def _quantitize_data(data, data_fixed_scale, data_cfg, name=None, pre_data=None, post_data=None):
+def _quantitize_data(data, data_fixed_scale, data_cfg, name=None, pre_data=None, post_data=None, col_key=None):
     training = get_context(TRAINING_PLACEHOLDER_KEY)
     base_name, _ = _get_basename(data)
     base_name = name if name else base_name
@@ -40,7 +40,8 @@ def _quantitize_data(data, data_fixed_scale, data_cfg, name=None, pre_data=None,
                        lambda: _quantitize_cfg(data, data_fixed_scale, data_cfg.not_training, data_cfg.bit_width),
                        name="{}_select".format(base_name))
 
-    tf.add_to_collection(FIXED_DATA_COL_KEY, out_data)
+    if col_key:
+        tf.add_to_collection(col_key, out_data)
     return out_data
 
 def _quantitize_grad(data, grad_fixed_scale, grad_cfg, name=None, pre_grad=None, post_grad=None):
@@ -103,13 +104,14 @@ def _do_quantitize(data, scale, bit_width, name):
         # * Modify the `new_scale` calculation.
         return tf.minimum(tf.maximum(tf.round(data / step) * step, minimum), maximum, name=name)
 
-def quantitize(data, cfg, name=None, scope=None, strategies=None, data_type="weight"):
+def quantitize(data, cfg, name=None, scope=None, strategies=None, data_type=DataTypes.OTHER, col_key_prefix=None):
     """
     Arguments:
         data: tf.Tensor
         cfg: nics_fix.config.FixedConfig
     """
     assert strategies is None or isinstance(strategies, Strategies)
+    assert data_type in DataTypes.all
 
     scope = scope or tf.get_variable_scope()
     with tf.variable_scope(scope) as sc:
@@ -130,8 +132,16 @@ def quantitize(data, cfg, name=None, scope=None, strategies=None, data_type="wei
                                                    trainable=False, initializer=tf.constant_initializer(0))
                 grad_fixed_scale = tf.get_variable("grad/" + prefix_name, shape=(), dtype=tf.float32,
                                                    trainable=False, initializer=tf.constant_initializer(0))
-                tf.add_to_collection(FIXED_DATA_SCALE_COL_KEY, data_fixed_scale)
-                tf.add_to_collection(FIXED_GRAD_SCALE_COL_KEY, grad_fixed_scale)
+
+                data_fixed_col_key = col_key_prefix + "_data_scale" if col_key_prefix else\
+                                     _get_fixed_key(data_type, scale=True)
+                grad_fixed_col_key = col_key_prefix + "_grad_scale" if col_key_prefix else\
+                                     _get_fixed_key(data_type, grad=True, scale=True)
+
+                if data_fixed_col_key is not None:
+                    tf.add_to_collection(data_fixed_col_key, data_fixed_scale)
+                if grad_fixed_col_key is not None:
+                    tf.add_to_collection(grad_fixed_col_key, grad_fixed_scale)
 
             if strategies is not None:
                 pre_data = strategies.get_func(data_type=data_type, phase="pre", grad=False)
@@ -144,8 +154,9 @@ def quantitize(data, cfg, name=None, scope=None, strategies=None, data_type="wei
                 pre_grad = None
                 post_grad = None
 
+            data_col_key = col_key_prefix + "_data" if col_key_prefix else _get_fixed_key(data_type)
             return _quantitize_grad(_quantitize_data(data, data_fixed_scale, cfg.data_config, name,
-                                                     pre_data=pre_data, post_data=post_data),
+                                                     pre_data=pre_data, post_data=post_data, col_key=data_col_key),
                                     grad_fixed_scale, cfg.gradient_config, name, pre_grad=pre_grad, post_grad=post_grad)
                                     
 

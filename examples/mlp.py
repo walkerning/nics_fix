@@ -2,8 +2,9 @@
 
 from __future__ import print_function
 
-import argparse
 import sys
+import argparse
+import itertools
 
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
@@ -28,7 +29,7 @@ def main(_):
     with nf.fixed_scope("fixed_mlp_mnist", cfgs) as (s, training):
         training_placeholder = training
         # Using chaining writing style:
-        res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10).tensor
+        res = nf.wrap(x).Dense(units=100, name="dense1").ReLU(name="relu1").Dense(units=10, name="dense2").tensor
         # Alternatively, you can use the normal writing style:
         # res = nf.Dense(nf.ReLU(nf.Dense(x, units=100)), units=10)
 
@@ -50,16 +51,18 @@ def main(_):
     correct_prediction = tf.equal(tf.argmax(res, 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-    data_scales = tf.get_collection(nf.FIXED_DATA_SCALE_COL_KEY)
-    acc, scales = sess.run([accuracy, data_scales], feed_dict={x: mnist.test.images,
-                                                               y_: mnist.test.labels,
-                                                               training_placeholder: False})
+    weight_data_scales = tf.get_collection(nf.FixedKeys.FIXED_WEIGHT_DATA_SCALE)
+    act_data_scales = tf.get_collection(nf.FixedKeys.FIXED_ACTIVATION_DATA_SCALE)
+    acc, weight_scales, act_scales = sess.run([accuracy, weight_data_scales, act_data_scales],
+                                              feed_dict={x: mnist.test.images,
+                                                         y_: mnist.test.labels,
+                                                         training_placeholder: False})
+
     print("accuracy: ", acc)
     print("Data fix scales: ", "\n".join(["{} {}".format(*item) for item in \
-                                          zip([tensor.op.name for tensor in data_scales], scales)]))
-    acc, scales = sess.run([accuracy, data_scales], feed_dict={x: mnist.test.images,
-                                                               y_: mnist.test.labels,
-                                                               training_placeholder: False})
+                                          zip([tensor.op.name for tensor in \
+                                               itertools.chain(weight_data_scales, act_data_scales)],
+                                              itertools.chain(weight_scales, act_scales))]))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

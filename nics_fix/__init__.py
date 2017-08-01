@@ -13,6 +13,7 @@ logging.basicConfig(
     format="NICS_FIX: [%(levelname)s] %(asctime)s %(module)8s:%(lineno)2d] %(message)s"
 )
 
+from .consts import *
 from .context import *
 from .ops import *
 from .ops_inner import *
