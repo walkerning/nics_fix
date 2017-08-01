@@ -17,6 +17,7 @@ from nics_fix.strategy import Strategies
 __all__ = ["fixed_register", "wrap"]
 
 fixed_ops_registry = Registry("fixed ops")
+no_fixed_ops_registry = Registry("no fixed ops")
 
 class _Holder(tf.Tensor):
     def __init__(self, tensor):
@@ -25,9 +26,23 @@ class _Holder(tf.Tensor):
     def apply(self, func):
         return _Holder(func(self._tensor))
 
+    @property
+    def methods(self):
+        return fixed_ops_registry.list() + no_fixed_ops_registry.list()
+
+    @property
+    def fixed_methods(self):
+        return fixed_ops_registry.list()
+
+    @property
+    def no_fixed_methods(self):
+        return no_fixed_ops_registry.list()
+
     def __getattr__(self, name):
         if name in fixed_ops_registry.list():
             return partial(fixed_ops_registry.lookup(name), self._tensor)
+        if name in no_fixed_ops_registry.list():
+            return partial(no_fixed_ops_registry.lookup(name), self._tensor)
         # Default, proxy to inner tensor
         return getattr(self._tensor, name)
 
@@ -85,7 +100,8 @@ def fixed_register(inner_func, type_name, default_config=default_fix_config):
             res = inner_func(*args, **kwargs)
             s.set_custom_getter(None)
             if strategy_cfg is None:
-                res = _recursive_eval(res, lambda x: _Holder(quantitize(x, act_cfg, name="activation", data_type=DataTypes.ACTIVATION)), type_check=tf.Tensor)
+                res = _recursive_eval(res, lambda x: _Holder(quantitize(x, act_cfg, name="activation",
+                                                                        data_type=DataTypes.ACTIVATION)), type_check=tf.Tensor)
             else:
                 res = _recursive_eval(res, lambda x: _Holder(quantitize(x, act_cfg, name="activation",
                                                                         strategies=strategies, data_type=DataTypes.ACTIVATION)),
@@ -96,3 +112,19 @@ def fixed_register(inner_func, type_name, default_config=default_fix_config):
     fixed_ops_registry.register(_true_func, type_name)
     FixedConfigs.register_default(type_name, default_config)
     return _true_func
+
+def no_fixed_register(inner_func, type_name):
+    """
+    Register a no-fixed operation. For convenience to write the model in chain style.
+    """
+    if type_name in fixed_ops_registry.list():
+        raise RuntimeError(("`{}` is already registered as a fixed operation, "
+                           "you can not register it as a no-fixed operation.").format(type_name))
+    @wraps(inner_func)
+    def _true_func(*args, **kwargs):
+        res = inner_func(*args, **kwargs)
+        res = _recursive_eval(res, lambda x: _Holder(x), type_check=tf.Tensor)
+        return res
+
+    no_fixed_ops_registry.register(_true_func, type_name)
+    return inner_func
