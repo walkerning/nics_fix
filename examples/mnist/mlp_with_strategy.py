@@ -2,9 +2,8 @@
 
 from __future__ import print_function
 
-import sys
 import argparse
-import itertools
+import sys
 
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
@@ -23,13 +22,17 @@ def main(_):
     y_ = tf.placeholder(tf.float32, [None, 10])
 
     cfgs = nf.parse_cfg_from_str("")
+    s_cfgs = nf.parse_strategy_cfg_from_str("")
+
     if FLAGS.cfg is not None:
         cfgs = nf.parse_cfg_from_file(FLAGS.cfg)
+    if FLAGS.scfg is not None:
+        s_cfgs = nf.parse_strategy_cfg_from_file(FLAGS.scfg)
 
-    with nf.fixed_scope("fixed_mlp_mnist", cfgs) as (s, training):
+    with nf.fixed_scope("fixed_mlp_mnist", cfgs, s_cfgs) as (s, training, _):
         training_placeholder = training
         # Using chaining writing style:
-        res = nf.wrap(x).Dense(units=100, name="dense1").ReLU(name="relu1").Dense(units=10, name="dense2").tensor
+        res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10).tensor
         # Alternatively, you can use the normal writing style:
         # res = nf.Dense(nf.ReLU(nf.Dense(x, units=100)), units=10)
 
@@ -50,19 +53,9 @@ def main(_):
     # Test trained model
     correct_prediction = tf.equal(tf.argmax(res, 1), tf.argmax(y_, 1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-
-    weight_data_scales = tf.get_collection(nf.FixedKeys.FIXED_WEIGHT_DATA_SCALE)
-    act_data_scales = tf.get_collection(nf.FixedKeys.FIXED_ACTIVATION_DATA_SCALE)
-    acc, weight_scales, act_scales = sess.run([accuracy, weight_data_scales, act_data_scales],
-                                              feed_dict={x: mnist.test.images,
-                                                         y_: mnist.test.labels,
-                                                         training_placeholder: False})
-
-    print("accuracy: ", acc)
-    print("Data fix scales: ", "\n".join(["{} {}".format(*item) for item in \
-                                          zip([tensor.op.name for tensor in \
-                                               itertools.chain(weight_data_scales, act_data_scales)],
-                                              itertools.chain(weight_scales, act_scales))]))
+    print(sess.run(accuracy, feed_dict={x: mnist.test.images,
+                                        y_: mnist.test.labels,
+                                        training_placeholder: False}))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -70,6 +63,8 @@ if __name__ == "__main__":
                         help="Directory for storing input data")
     parser.add_argument("--cfg", type=str, default=None,
                         help="The file for fixed configration.")
+    parser.add_argument("--scfg", type=str, default=None,
+                        help="The file for strategy configration.")
     FLAGS, unparsed = parser.parse_known_args()
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
 
