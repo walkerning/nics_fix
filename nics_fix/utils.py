@@ -20,8 +20,9 @@ def fixed_model_saver(fixed_mapping, fixed_weight=False):
         with tf.variable_scope("A_SAFE_NEVER_WILL_OCCUR_SCOPE"):
             tensor_tmp_var = {tensor.op.name: (info["q_data"], tf.get_variable(tensor.op.name, shape=info["q_data"].get_shape())) \
                                                for tensor, info in weight_fixed_mapping.iteritems()}
-        weight_dct = {name: tmp_var for name, (tmp_var, _) in tensor_tmp_var.iteritems()}
-        saver.update(weight_dct)
+        weight_dct = {name: tmp_var for name, (_, tmp_var) in tensor_tmp_var.iteritems()}
+        saver_dct.update(weight_dct)
+
     saver = tf.train.Saver(saver_dct)
     
     @wraps(tf.train.Saver.save)

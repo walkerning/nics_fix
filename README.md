@@ -85,4 +85,6 @@ Use the environment variable `NICS_FIX_LOGLEVEL` to control the python logging m
 
 Use `nf.fixed_model_saver(fixed_mapping)` to get a patched `tf.train.Saver` to save fixed model. Usually, the argument `fixed_mapping` should be the one yield by the `nf.fixed_scope` context manager.
 
+If you want the saved model's weights to be already fixed, pass keyword argument `fixed_weight=True` to `nf.fixed_model_saver`.
+
 See `examples/mnist/mlp.py` for an example of saving fixed model, and `examples/mnist/mlp_eval.py` for an example of loading a saved fixed model and run evaluation only.

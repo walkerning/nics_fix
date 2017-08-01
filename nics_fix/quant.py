@@ -153,8 +153,8 @@ def quantitize(data, cfg, name=None, scope=None, strategies=None, data_type=Data
                 if grad_fixed_col_key is not None:
                     tf.add_to_collection(grad_fixed_col_key, grad_fixed_scale)
                 fixed_mapping = get_context(FIXED_MAPPING_KEY)[data_type]
-                fixed_mapping.setdefault(data.op.name, {})["q_data_scale"] = data_fixed_scale
-                fixed_mapping[data.op.name]["q_grad_scale"] = grad_fixed_scale
+                fixed_mapping.setdefault(data, {})["q_data_scale"] = data_fixed_scale
+                fixed_mapping[data]["q_grad_scale"] = grad_fixed_scale
 
             if strategies is not None:
                 pre_data = strategies.get_func(data_type=data_type, phase="pre", grad=False)

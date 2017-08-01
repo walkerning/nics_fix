@@ -38,7 +38,7 @@ def main(_):
         # res = nf.Dense(nf.ReLU(nf.Dense(x, units=100)), units=10)
 
     # Construct the fixed saver
-    saver = nf.utils.fixed_model_saver(fixed_mapping)
+    saver = nf.utils.fixed_model_saver(fixed_mapping, fixed_weight=True)
 
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=res))
