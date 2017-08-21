@@ -97,3 +97,12 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# json
+*.json
+
+# snapshot
+*.index
+*.meta
+*.data*
+checkpoint
