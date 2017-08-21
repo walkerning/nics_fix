@@ -29,7 +29,7 @@ def main(_):
     if FLAGS.scfg is not None:
         s_cfgs = nf.parse_strategy_cfg_from_file(FLAGS.scfg)
 
-    with nf.fixed_scope("fixed_mlp_mnist", cfgs, s_cfgs) as (s, training):
+    with nf.fixed_scope("fixed_mlp_mnist", cfgs, s_cfgs) as (s, training, _):
         training_placeholder = training
         # Using chaining writing style:
         res = nf.wrap(x).Dense(units=100).ReLU().Dense(units=10).tensor

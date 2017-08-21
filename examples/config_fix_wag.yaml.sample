@@ -1,5 +1,5 @@
 by_type:
-  Conv2d:
+  Conv2D:
     weight:
       data_config: 
         bit_width: 2
