@@ -10,7 +10,7 @@ from nics_fix.consts import FixedKeys
 
 __all__ = ["fixed_model_saver"]
 
-def fixed_model_saver(fixed_mapping, fixed_weight=False):
+def fixed_model_saver(fixed_mapping, fixed_weight=False, **kwargs):
     saver_dct = {tensor.op.name: tensor for tensor in tf.global_variables()}
     tensor_tmp_var = {}
 
@@ -23,7 +23,7 @@ def fixed_model_saver(fixed_mapping, fixed_weight=False):
         weight_dct = {name: tmp_var for name, (_, tmp_var) in tensor_tmp_var.iteritems()}
         saver_dct.update(weight_dct)
 
-    saver = tf.train.Saver(saver_dct)
+    saver = tf.train.Saver(saver_dct, **kwargs)
     
     @wraps(tf.train.Saver.save)
     def _patch_save(self, sess, *args, **kwargs):

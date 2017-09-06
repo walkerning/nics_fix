@@ -10,7 +10,7 @@ from tensorflow.python.framework.registry import Registry
 
 from nics_fix.consts import DataTypes
 from nics_fix.config import FixedConfigs, default_fix_config
-from nics_fix.context import get_context, FIXED_CONFIG_KEY, FIXED_STRATEGY_CONFIG_KEY
+from nics_fix.context import get_context, get_kwargs, FIXED_CONFIG_KEY, FIXED_STRATEGY_CONFIG_KEY
 from nics_fix.quant import quantitize
 from nics_fix.strategy import Strategies
 
@@ -97,7 +97,8 @@ def fixed_register(inner_func, type_name, default_config=default_fix_config):
                 custom_getter = map_variables(partial(quantitize, cfg=weight_cfg, scope=s,
                                                       strategies=strategies, data_type=DataTypes.WEIGHT))
             s.set_custom_getter(custom_getter)
-            res = inner_func(*args, **kwargs)
+            kwargs_add_default = get_kwargs(inner_func, type_name, kwargs)
+            res = inner_func(*args, **kwargs_add_default)
             s.set_custom_getter(None)
             if strategy_cfg is None:
                 res = _recursive_eval(res, lambda x: _Holder(quantitize(x, act_cfg, name="activation",
@@ -122,7 +123,8 @@ def no_fixed_register(inner_func, type_name):
                            "you can not register it as a no-fixed operation.").format(type_name))
     @wraps(inner_func)
     def _true_func(*args, **kwargs):
-        res = inner_func(*args, **kwargs)
+        kwargs_add_default = get_kwargs(inner_func, type_name, kwargs)
+        res = inner_func(*args, **kwargs_add_default)
         res = _recursive_eval(res, lambda x: _Holder(x), type_check=tf.Tensor)
         return res
 

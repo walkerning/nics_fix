@@ -2,6 +2,8 @@
 
 from __future__ import print_function
 
+import copy
+import inspect
 from contextlib import contextmanager
 
 import tensorflow as tf
@@ -11,7 +13,7 @@ from nics_fix.consts import DataTypes
 from nics_fix.config import FixedConfigs
 from nics_fix.strategy_config import StrategyConfigs
 
-__all__ = ["get_context", "fixed_scope", "FIXED_MAPPING_KEY"]
+__all__ = ["get_context", "fixed_scope", "kwargs_scope", "kwargs_scope_by_type", "FIXED_MAPPING_KEY"]
 
 # Context used by fixed scope
 _context = {}
@@ -20,6 +22,7 @@ FIXED_CONFIG_KEY = "__fixed_config"
 FIXED_STRATEGY_CONFIG_KEY = "__fixed_strategy_config"
 FIXED_MAPPING_KEY = "__fixed_mapping"
 TRAINING_PLACEHOLDER_KEY = "fix_training_placeholder"
+METHOD_KWARGS_KEY = "__method_kwargs"
 
 def get_context(key):
     return _context.get(key, None)
@@ -61,3 +64,42 @@ def fixed_scope(name_or_scope, fixed_config, strategy_config=None):
         _context.pop(FIXED_STRATEGY_CONFIG_KEY, None)
         _context.pop(FIXED_MAPPING_KEY, None)
         _context.pop(TRAINING_PLACEHOLDER_KEY, None)
+
+@contextmanager
+def kwargs_scope(_override=False, **kwargs):
+    old_kwargs = copy.copy(_context.get(METHOD_KWARGS_KEY, None))
+    if _override or METHOD_KWARGS_KEY not in _context:
+        _context[METHOD_KWARGS_KEY] = copy.copy(kwargs)
+    else:
+        _context[METHOD_KWARGS_KEY].update(kwargs)
+    yield
+    if old_kwargs is None:
+        _context.pop(METHOD_KWARGS_KEY, None)
+    else:
+        _context[METHOD_KWARGS_KEY] = old_kwargs
+
+@contextmanager
+def kwargs_scope_by_type(_override=False, **kwargs):
+    assert all(isinstance(v, dict) for v in kwargs.values()), \
+        "`kwargs_scope_by_type` receive kwargs only in this format: {'typename1' : {'argname1': argvalue1, 'argname2': argvalue2} ...}"
+    old_kwargs = copy.copy(_context.get(METHOD_KWARGS_KEY, None))
+    qualified_kwargs = {".".join([type_name, argname]): argvalue for type_name, argspec in kwargs.iteritems() for argname, argvalue in argspec.iteritems()}
+    if _override or METHOD_KWARGS_KEY not in _context:
+        _context[METHOD_KWARGS_KEY] = qualified_kwargs
+    else:
+        _context[METHOD_KWARGS_KEY].update(qualified_kwargs)
+    yield
+    if old_kwargs is None:
+        _context.pop(METHOD_KWARGS_KEY, None)
+    else:
+        _context[METHOD_KWARGS_KEY] = old_kwargs
+
+def get_kwargs(func, type_name, true_kwargs):
+    default_kwargs = get_context(METHOD_KWARGS_KEY)
+    arg_names = set(inspect.getargspec(func).args)
+    func_default_kwargs = {argname.split(".")[-1] : argvalue for argname, argvalue in default_kwargs.iteritems()
+                           if "." not in argname or argname.startswith(type_name + ".")}
+    kwargs = {argname : argvalue for argname, argvalue in func_default_kwargs.iteritems()
+              if argname in arg_names}
+    kwargs.update(true_kwargs)
+    return kwargs
