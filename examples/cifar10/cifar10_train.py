@@ -13,7 +13,6 @@ from __future__ import print_function
 import os
 import sys
 import time
-import pickle
 import random
 import argparse
 import subprocess
@@ -162,14 +161,24 @@ def VGG11(x, num_classes, training, weight_decay):
                 .Dropout(rate=0.5, training=training)
                 .Dense(units=num_classes, name="dense8"))
 
+def log(*args, **kwargs):
+    flush = kwargs.pop("flush", None)
+    if FLAGS.log_file is not None:
+        print(*args, file=FLAGS.log_file, **kwargs)
+        if flush:
+            FLAGS.log_file.flush()
+    print(*args, **kwargs)
+    if flush:
+        sys.stdout.flush()
+
 def main(_):
     batch_size = FLAGS.batch_size # default to 128
     num_classes = 10
 
     # The data, shuffled and split between train and test sets:
     (x_train, y_train), (x_test, y_test) = cifar10.load_data()
-    print(x_train.shape[0], " train samples")
-    print(x_test.shape[0], " test samples")
+    log(x_train.shape[0], " train samples")
+    log(x_test.shape[0], " test samples")
     
     # Convert class vectors to binary class matrices.
     y_train = keras.utils.to_categorical(y_train, num_classes)
@@ -200,6 +209,8 @@ def main(_):
     # Loss and metrics
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits))
+    reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    loss = cross_entropy + tf.add_n(reg_losses)
     index_label = tf.argmax(labels, 1)
     correct = tf.equal(tf.argmax(logits, 1), index_label)
     accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
@@ -210,12 +221,12 @@ def main(_):
     global_step = tf.Variable(0, name="global_step", trainable=False)
     # Learning rate is multiplied by 0.5 after training for every 30 epochs
     learning_rate = tf.train.exponential_decay(0.05, global_step=global_step,
-                                               decay_steps=x_train.shape[0] // batch_size * 30,
+                                               decay_steps=int(x_train.shape[0] / batch_size * 30),
                                                decay_rate=0.5, staircase=True)
     optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=0.9)
-    train_step = optimizer.minimize(cross_entropy, global_step=global_step)
+    train_step = optimizer.minimize(loss, global_step=global_step)
     
-    print("Using real-time data augmentation.")
+    log("Using real-time data augmentation.")
     # This will do preprocessing and realtime data augmentation:
     datagen_train = ImageDataGenerator(
         featurewise_center=True,  # set input mean to 0 over the dataset
@@ -251,7 +262,7 @@ def main(_):
     config.gpu_options.allow_growth=True
     with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
-        print("Start training...")
+        log("Start training...")
         # Training
         gen = MultiProcessGen(datagen_train.flow(x_train, y_train, batch_size=batch_size))
         try:
@@ -267,7 +278,7 @@ def main(_):
                     # TODO: use another thread to execute the data augumentation and enqueue
                     x_v, y_v = next(gen)
                     x_crop_v = random_crop(x_v)
-                    _, loss_v, acc_1, acc_5 = sess.run([train_step, cross_entropy, accuracy, top5_accuracy],
+                    _, loss_v, acc_1, acc_5 = sess.run([train_step, loss, accuracy, top5_accuracy],
                                                        feed_dict={
                                                            x: x_crop_v,
                                                            labels: y_v
@@ -283,8 +294,8 @@ def main(_):
 
                 duration = time.time() - start_time
                 sec_per_batch = duration / (steps_per_epoch * batch_size)
-                print("\r{}: Epoch {}; (average) loss: {:.3f}; (average) top1 accuracy: {:.2f} %; (average) top5 accuracy: {:.2f} %. {:.3f} sec/batch"\
-                      .format(datetime.now(), epoch, loss_v_epoch, acc_1_epoch * 100, acc_5_epoch * 100, sec_per_batch))
+                log("\r{}: Epoch {}; (average) loss: {:.3f}; (average) top1 accuracy: {:.2f} %; (average) top5 accuracy: {:.2f} %. {:.3f} sec/batch"\
+                      .format(datetime.now(), epoch, loss_v_epoch, acc_1_epoch * 100, acc_5_epoch * 100, sec_per_batch), flush=True)
                 # End training batches
 
                 # Test on the validation set
@@ -297,7 +308,7 @@ def main(_):
                     try:
                         for step in range(1, steps_per_epoch+1):
                             x_v, y_v = next(test_gen)
-                            loss_v, acc_1, acc_5 = sess.run([cross_entropy, accuracy, top5_accuracy],
+                            loss_v, acc_1, acc_5 = sess.run([loss, accuracy, top5_accuracy],
                                                     feed_dict={
                                                         x: x_v,
                                                         labels: y_v
@@ -309,7 +320,7 @@ def main(_):
                         loss_test /= steps_per_epoch
                         acc_1_test /= steps_per_epoch
                         acc_5_test /= steps_per_epoch
-                        print("\r\tTest: loss: {}; top1 accuracy: {:.2f} %; top5 accuracy: {:2f} %.".format(loss_test, acc_1_test * 100, acc_5_test * 100))
+                        log("\r\tTest: loss: {}; top1 accuracy: {:.2f} %; top5 accuracy: {:2f} %.".format(loss_test, acc_1_test * 100, acc_5_test * 100), flush=True)
                     finally:
                         test_gen.stop()
                 # End test on the validation set
@@ -321,7 +332,7 @@ def main(_):
             if not os.path.exists(FLAGS.train_dir):
                 subprocess.check_call("mkdir -p {}".format(FLAGS.train_dir),
                                       shell=True)
-            print("Saved model to: ", saver.save(sess, FLAGS.train_dir))
+            log("Saved model to: ", saver.save(sess, FLAGS.train_dir))
     
     # # Load label names to use in prediction results
     # label_list_path = "datasets/cifar-10-batches-py/batches.meta"
@@ -336,6 +347,8 @@ def main(_):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--log_file", type=str, default=None,
+                        help="Optional file to write logs to.")
     parser.add_argument("--train_dir", type=str, default="",
                         help="Directory for storing snapshots")
     parser.add_argument("--model", type=str, default="VGG11",
@@ -352,7 +365,9 @@ if __name__ == "__main__":
     parser.add_argument("--weight-decay", type=float, default=5e-4,
                         help="The L2 weight decay parameter.")
     FLAGS, unparsed = parser.parse_known_args()
+    if FLAGS.log_file:
+        FLAGS.log_file = open(FLAGS.log_file, "w")
     if not FLAGS.train_dir:
-        print("WARNING: model will not be saved if `--train_dir` option is not given.")
+        log("WARNING: model will not be saved if `--train_dir` option is not given.")
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
 
