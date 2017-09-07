@@ -67,6 +67,22 @@ def fixed_scope(name_or_scope, fixed_config, strategy_config=None):
 
 @contextmanager
 def kwargs_scope(_override=False, **kwargs):
+    """
+    Created a default keyword arguments context.
+
+    An example of using:
+    ```python
+    with kwargs_scope(**{"Conv2D.kernel_size": (3, 3),
+                         "kernel_regularizer": tf.contrib.layers.l2_regularizer(scale=scale)}):
+        logits = nf.wraps(x).Conv2D(name="conv1", kernel_size=(7, 7), filters=32)\
+                 .Conv2D(name="conv2", filters=32).Flatten()
+                 .Dense(units=10, name="dense3").tensor
+    ```
+    As both `tf.layers.conv2d` and `tf.layers.dense` receive keyword arguments named `kernel_regularizer`,
+    this default regularization keyword arguments will be applied to all the three layers created (conv1, conv2, dense3).
+    The layer "conv2" will have kernel size (3, 3), whereas layer "conv1" will have kernel size (7, 7), 
+    overriding the default value (3, 3).
+    """
     old_kwargs = copy.copy(_context.get(METHOD_KWARGS_KEY, None))
     if _override or METHOD_KWARGS_KEY not in _context:
         _context[METHOD_KWARGS_KEY] = copy.copy(kwargs)
@@ -80,6 +96,29 @@ def kwargs_scope(_override=False, **kwargs):
 
 @contextmanager
 def kwargs_scope_by_type(_override=False, **kwargs):
+    """
+    Created a default keyword arguments context. Specified by type names.
+    All the value of specifications should be a dictionary of format `{argname: argvalue}`.
+
+    An example of using:
+    ```python
+    with kwargs_scope(Conv2D={"kernel_size": (3, 3),
+                              "kernel_regularizer": tf.contrib.layers.l2_regularizer(scale=scale1)},
+                      MaxPool={"strides": 2,
+                               "pool_size": (2, 2)},
+                      Dense={"kernel_regularizer": tf.contrib.layers.l2_regularizer(scale=scale2)})
+        logits = nf.wraps(x).Conv2D(name="conv1", kernel_size=(7, 7), filters=32)\
+                 .MaxPool(name="pool1")
+                 .Conv2D(name="conv2", filters=64)
+                 .MaxPool(name="pool2")
+                 .Conv2D(name="conv3", filters=128)
+                 .Flatten()
+                 .Dense(units=10, name="dense5").tensor
+    ```
+    The three convolution layers will have the same kernel regularizer scale, layer "conv1" have kernel size (7, 7), whereas
+    other two convolution layers have kernel size (3, 3). All max pooling layers will have `strides` equals to 2, `pool_size`
+    equals to (2, 2). The dense layer use a different kernel regularization scale with convolution layers.
+    """
     assert all(isinstance(v, dict) for v in kwargs.values()), \
         "`kwargs_scope_by_type` receive kwargs only in this format: {'typename1' : {'argname1': argvalue1, 'argname2': argvalue2} ...}"
     old_kwargs = copy.copy(_context.get(METHOD_KWARGS_KEY, None))
@@ -96,6 +135,8 @@ def kwargs_scope_by_type(_override=False, **kwargs):
 
 def get_kwargs(func, type_name, true_kwargs):
     default_kwargs = get_context(METHOD_KWARGS_KEY)
+    if not default_kwargs:
+        return true_kwargs
     arg_names = set(inspect.getargspec(func).args)
     func_default_kwargs = {argname.split(".")[-1] : argvalue for argname, argvalue in default_kwargs.iteritems()
                            if "." not in argname or argname.startswith(type_name + ".")}

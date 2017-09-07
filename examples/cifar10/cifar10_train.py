@@ -2,6 +2,8 @@
 """
 This is an example of training cifar10.
 
+Hyper-parameters for training VGG11 follows https://github.com/chengyangfu/pytorch-vgg-cifar10/blob/master/main.py
+
 **NOTE**: To run this script, you should install keras, as the data handling utils is from keras.
 """
 
@@ -204,9 +206,14 @@ def main(_):
     top5_correct = tf.nn.in_top_k(logits, index_label, 5)
     top5_accuracy = tf.reduce_mean(tf.cast(top5_correct, tf.float32))
     
-    # Initialize RMSprop optimizer
-    optimizer = tf.train.RMSPropOptimizer(learning_rate=0.0001, decay=1e-6)
-    train_step = optimizer.minimize(cross_entropy)
+    # Initialize the optimizer
+    global_step = tf.Variable(0, name="global_step", trainable=False)
+    # Learning rate is multiplied by 0.5 after training for every 30 epochs
+    learning_rate = tf.train.exponential_decay(0.05, global_step=global_step,
+                                               decay_steps=x_train.shape[0] // batch_size * 30,
+                                               decay_rate=0.5, staircase=True)
+    optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=0.9)
+    train_step = optimizer.minimize(cross_entropy, global_step=global_step)
     
     print("Using real-time data augmentation.")
     # This will do preprocessing and realtime data augmentation:

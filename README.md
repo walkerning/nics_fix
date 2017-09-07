@@ -70,7 +70,7 @@ Examples
 ### Datasets
 
 * See `examples/mnist/mlp.py` for a simple example of a shallow fixed-point MLP on Mnist. 
-* See `examples/cifar10/cifar10_train.py` for an example of a simple fixed-point CNN on Cifar10.
+* See `examples/cifar10/cifar10_train.py` for an example of training fixed-point CNN (VGG11) on Cifar10.
 
 Try `cd examples/mnist && python mlp.py --cfg ../config_fix_wag.yaml.sample`.
 
@@ -79,7 +79,13 @@ Other
 
 ### Logging
 
-Use the environment variable `NICS_FIX_LOGLEVEL` to control the python logging module. Avaiable log levels are `{"debug", "info", "warning", "error", "fatal"}`. By default, the log level is set to "warning".
+Use the environment variable `NICS_FIX_LOGLEVEL` to control the log level in `nics_fix` package. Avaiable log levels are `{"debug", "info", "warning", "error", "fatal"}`. By default, the log level is set to "warning".
+
+### Helper Utilities
+
+There are some helper utils that helps to write cleaner test scripts.
+
+* `nics_fix.kwargs_scope` and `nics_fix.kwargs_scope_by_type`: A context manager that will try to supply common default keyword arguments to the registered methods called in the context. See `examples/cifar10/cifar10_train.py` for an example of use.
 
 ### Saving Fixed Model
 

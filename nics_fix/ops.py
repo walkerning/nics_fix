@@ -2,12 +2,12 @@
 
 from __future__ import print_function
 
-import logging
 from functools import wraps, partial
 
 import tensorflow as tf
 from tensorflow.python.framework.registry import Registry
 
+from nics_fix.logger import logger
 from nics_fix.consts import DataTypes
 from nics_fix.config import FixedConfigs, default_fix_config
 from nics_fix.context import get_context, get_kwargs, FIXED_CONFIG_KEY, FIXED_STRATEGY_CONFIG_KEY
@@ -89,7 +89,7 @@ def fixed_register(inner_func, type_name, default_config=default_fix_config):
         scope_name = tf.get_default_graph().unique_name(name if name else type_name)
         scope_name = scope_name[scope_name.rfind("/", 1)+1:]
         with tf.variable_scope(scope_name) as s:
-            logging.debug("scope name: {}, original name scope: {}".format(s.name, s.original_name_scope))
+            logger.debug("scope name: {}, original name scope: {}".format(s.name, s.original_name_scope))
             #with tf.variable_scope(cur_scope) as s, tf.name_scope(s.original_name_scope):
             if strategy_cfg is None:
                 custom_getter = map_variables(partial(quantitize, cfg=weight_cfg, scope=s, data_type=DataTypes.WEIGHT))
