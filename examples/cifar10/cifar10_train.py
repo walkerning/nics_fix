@@ -15,6 +15,7 @@ import pickle
 import random
 import argparse
 import subprocess
+import multiprocessing
 import numpy as np
 from datetime import datetime
 
@@ -27,6 +28,8 @@ import tensorflow as tf
 import nics_fix as nf
 
 FLAGS = None
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 class RandomCrop():
     def __init__(self, size, padding=0):
@@ -54,6 +57,47 @@ class RandomCrop():
         x1 = random.randint(0, w - tw)
         y1 = random.randint(0, h - th)
         return img_padding[:, x1:x1 + tw, y1:y1 + th, :]
+
+class MultiProcessGen(object):
+    def __init__(self, data_gen, max_queue_size=10, wait_time=0.05):
+        self.data_gen = data_gen
+        self.wait_time = wait_time
+        self.queue = multiprocessing.Queue(maxsize=max_queue_size)
+        self._stop_event = multiprocessing.Event()
+        def datagen_task():
+            while not self._stop_event.is_set():
+                try:
+                    if self.queue.qsize() < max_queue_size:
+                        self.queue.put(next(self.data_gen))
+                    else:
+                        time.sleep(self.wait_time)
+                except Exception:
+                    self._stop_event.set()
+                    raise
+        self.thread = multiprocessing.Process(target=datagen_task)
+        self.thread.start()
+        self.running = True
+
+    def stop(self):
+        if self.running:
+            self._stop_event.set()
+            self.thread.terminate()
+            self.queue.close()
+            self.thread = None
+            self._stop_event = None
+            self.queue = None
+            self.running = False
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        while self._stop_event and not self._stop_event.is_set():
+            if not self.queue.empty():
+                return self.queue.get()
+            else:
+                time.sleep(self.wait_time)
+        # return self.queue.get(block=True)
 
 def Conv4Dense2(x, num_classes, training, *args, **kwargs):
     return (nf.wrap(x)
@@ -196,67 +240,75 @@ def main(_):
     datagen_test.fit(x_test)
     random_crop = RandomCrop(32, 4) # padding 4 and crop 32x32
     
-    with tf.Session() as sess:
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth=True
+    with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
         print("Start training...")
         # Training
-        for epoch in range(1, FLAGS.epochs+1):
-            start_time = time.time()
-            gen = datagen_train.flow(x_train, y_train, batch_size=batch_size)
-            steps_per_epoch = x_train.shape[0] // batch_size
-            loss_v_epoch = 0
-            acc_1_epoch = 0
-            acc_5_epoch = 0
+        gen = MultiProcessGen(datagen_train.flow(x_train, y_train, batch_size=batch_size))
+        try:
+            for epoch in range(1, FLAGS.epochs+1):
+                start_time = time.time()
+                steps_per_epoch = x_train.shape[0] // batch_size
+                loss_v_epoch = 0
+                acc_1_epoch = 0
+                acc_5_epoch = 0
 
-            # Train batches
-            for step in range(1, steps_per_epoch+1):
-                # TODO: use another thread to execute the data augumentation and enqueue
-                x_v, y_v = next(gen)
-                x_crop_v = random_crop(x_v)
-                _, loss_v, acc_1, acc_5 = sess.run([train_step, cross_entropy, accuracy, top5_accuracy],
-                                                   feed_dict={
-                                                       x: x_crop_v,
-                                                       labels: y_v
-                                                   })
-                print("\rEpoch {}: steps {}/{}".format(epoch, step, steps_per_epoch), end="")
-                loss_v_epoch += loss_v
-                acc_1_epoch += acc_1
-                acc_5_epoch += acc_5
-                
-            loss_v_epoch /= steps_per_epoch
-            acc_1_epoch /= steps_per_epoch
-            acc_5_epoch /= steps_per_epoch
-
-            duration = time.time() - start_time
-            sec_per_batch = duration / (steps_per_epoch * batch_size)
-            print("\r{}: Epoch {}; (average) loss: {:.3f}; (average) top1 accuracy: {:.2f} %; (average) top5 accuracy: {:.2f} %. {:.3f} sec/batch"\
-                  .format(datetime.now(), epoch, loss_v_epoch, acc_1_epoch * 100, acc_5_epoch * 100, sec_per_batch))
-            # End training batches
-
-            # Test on the validation set
-            if epoch % FLAGS.test_frequency == 0:
-                test_gen = datagen_test.flow(x_test, y_test, batch_size=batch_size)
-                steps_per_epoch = x_test.shape[0] // batch_size
-                loss_test = 0
-                acc_1_test = 0
-                acc_5_test = 0
+                # Train batches
                 for step in range(1, steps_per_epoch+1):
-                    x_v, y_v = next(test_gen)
-                    loss_v, acc_1, acc_5 = sess.run([cross_entropy, accuracy, top5_accuracy],
-                                            feed_dict={
-                                                x: x_v,
-                                                labels: y_v
-                                            })
-                    print("\r\ttest steps: {}/{}".format(step, steps_per_epoch), end="")
-                    loss_test += loss_v
-                    acc_1_test += acc_1
-                    acc_5_test += acc_5
-                loss_test /= steps_per_epoch
-                acc_1_test /= steps_per_epoch
-                acc_5_test /= steps_per_epoch
-                print("\r\tTest: loss: {}; top1 accuracy: {:.2f} %; top5 accuracy: {:2f} %.".format(loss_test, acc_1_test * 100, acc_5_test * 100))
-            # End test on the validation set
-        # End training
+                    # TODO: use another thread to execute the data augumentation and enqueue
+                    x_v, y_v = next(gen)
+                    x_crop_v = random_crop(x_v)
+                    _, loss_v, acc_1, acc_5 = sess.run([train_step, cross_entropy, accuracy, top5_accuracy],
+                                                       feed_dict={
+                                                           x: x_crop_v,
+                                                           labels: y_v
+                                                       })
+                    print("\rEpoch {}: steps {}/{}".format(epoch, step, steps_per_epoch), end="")
+                    loss_v_epoch += loss_v
+                    acc_1_epoch += acc_1
+                    acc_5_epoch += acc_5
+
+                loss_v_epoch /= steps_per_epoch
+                acc_1_epoch /= steps_per_epoch
+                acc_5_epoch /= steps_per_epoch
+
+                duration = time.time() - start_time
+                sec_per_batch = duration / (steps_per_epoch * batch_size)
+                print("\r{}: Epoch {}; (average) loss: {:.3f}; (average) top1 accuracy: {:.2f} %; (average) top5 accuracy: {:.2f} %. {:.3f} sec/batch"\
+                      .format(datetime.now(), epoch, loss_v_epoch, acc_1_epoch * 100, acc_5_epoch * 100, sec_per_batch))
+                # End training batches
+
+                # Test on the validation set
+                if epoch % FLAGS.test_frequency == 0:
+                    test_gen = MultiProcessGen(datagen_test.flow(x_test, y_test, batch_size=batch_size))
+                    steps_per_epoch = x_test.shape[0] // batch_size
+                    loss_test = 0
+                    acc_1_test = 0
+                    acc_5_test = 0
+                    try:
+                        for step in range(1, steps_per_epoch+1):
+                            x_v, y_v = next(test_gen)
+                            loss_v, acc_1, acc_5 = sess.run([cross_entropy, accuracy, top5_accuracy],
+                                                    feed_dict={
+                                                        x: x_v,
+                                                        labels: y_v
+                                                    })
+                            print("\r\ttest steps: {}/{}".format(step, steps_per_epoch), end="")
+                            loss_test += loss_v
+                            acc_1_test += acc_1
+                            acc_5_test += acc_5
+                        loss_test /= steps_per_epoch
+                        acc_1_test /= steps_per_epoch
+                        acc_5_test /= steps_per_epoch
+                        print("\r\tTest: loss: {}; top1 accuracy: {:.2f} %; top5 accuracy: {:2f} %.".format(loss_test, acc_1_test * 100, acc_5_test * 100))
+                    finally:
+                        test_gen.stop()
+                # End test on the validation set
+            # End training
+        finally:
+            gen.stop()
 
         if FLAGS.train_dir:
             if not os.path.exists(FLAGS.train_dir):
