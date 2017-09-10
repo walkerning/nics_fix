@@ -360,7 +360,7 @@ if __name__ == "__main__":
                         "after every N epochs.")
     parser.add_argument("--epochs", type=int, default=300,
                         help="The max training epochs")
-    parser.add_argument("--batch_size", type=int, default=128,
+    parser.add_argument("--batch_size", type=int, default=100,
                         help="The training/testing batch size.")
     parser.add_argument("--weight-decay", type=float, default=5e-4,
                         help="The L2 weight decay parameter.")

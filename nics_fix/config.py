@@ -13,7 +13,8 @@ def _check_legal_config(cfg):
 
 # Do we all need default values for each configuration?
 class DataConfig(object):
-    def __init__(self, training="auto", not_training="fixed", bit_width=8):
+    # def __init__(self, training="auto", not_training="fixed", bit_width=8):
+    def __init__(self, training="none", not_training="none", bit_width=8):
         _check_legal_config(training)
         _check_legal_config(not_training)
         assert isinstance(bit_width, int) and bit_width > 0, "Illegal bitwidth: `{}`. Only accept positive integers."
@@ -42,7 +43,8 @@ class GradientConfig(object):
     def __eq__(self, another):
         return isinstance(another, GradientConfig) and self.bit_width == another.bit_width and self.training == another.training
 
-_default_data_config = DataConfig(training="auto", not_training="fixed", bit_width=8)
+# _default_data_config = DataConfig(training="auto", not_training="fixed", bit_width=8)
+_default_data_config = DataConfig(training="none", not_training="none")
 _default_gradient_config = GradientConfig(None, bit_width=32)
 _default_weight_config = {
     "data_config": _default_data_config,
