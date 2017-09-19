@@ -7,8 +7,8 @@ import logging
 
 __all__ = ["logger"]
 
-log_level = os.environ.get("NICS_FIX_LOGLEVEL", "WARNING").upper()
-log_level = getattr(logging, log_level, logging.WARNING)
+log_level = os.environ.get("NICS_FIX_LOGLEVEL", "INFO").upper()
+log_level = getattr(logging, log_level, logging.INFO)
 print("NICS_FIX: Use log level: {}".format(logging.getLevelName(log_level)))
 logger = logging.getLogger("NICS_FIX")
 logger.setLevel(log_level)

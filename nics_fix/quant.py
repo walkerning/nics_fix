@@ -46,6 +46,7 @@ def _quantitize_data(data, data_fixed_scale, data_cfg, name=None,
     if data_type and data_ori is not None:
         fixed_mapping = get_context(FIXED_MAPPING_KEY)[data_type]
         fixed_mapping.setdefault(data_ori, {})["q_data"] = out_data
+        fixed_mapping[data_ori]["data_cfg"] = data_cfg
     return out_data
 
 def _quantitize_grad(data, grad_fixed_scale, grad_cfg, name=None, pre_grad=None, post_grad=None,
@@ -73,6 +74,7 @@ def _quantitize_grad(data, grad_fixed_scale, grad_cfg, name=None, pre_grad=None,
             input_grad = post_grad(input_grad, grad_fixed_scale)
         if fixed_mapping is not None:
             fixed_mapping.setdefault(data_ori, {})["ori_grad"] = output_grad
+            fixed_mapping[data_ori]["grad_cfg"] = grad_cfg
         return input_grad
 
     G = tf.get_default_graph()

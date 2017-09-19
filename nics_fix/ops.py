@@ -75,19 +75,19 @@ def fixed_register(inner_func, type_name, default_config=default_fix_config):
             raise RuntimeError("You can not use the registered fixed operations outside the fixed context created by `fixed_scope`.")
         s_cfgs = get_context(FIXED_STRATEGY_CONFIG_KEY)
         name = kwargs.get("name", None)
-        weight_cfg, act_cfg = cfg.lookup(name, type_name)
-        strategy_cfg = s_cfgs and s_cfgs.lookup(name, type_name)
+        scope_name = tf.get_default_graph().unique_name(name if name else type_name)
+        scope_name = scope_name[scope_name.rfind("/", 1)+1:]
+        weight_cfg, act_cfg = cfg.lookup(scope_name, type_name)
+        strategy_cfg = s_cfgs and s_cfgs.lookup(scope_name, type_name)
         if strategy_cfg is not None:
             # FIXME: should use `scope_name` instead of `type_name` maybe
-            strategies = Strategies.init_from_cfgs(name or type_name, weight_cfg, act_cfg, strategy_cfg)
+            strategies = Strategies.init_from_cfgs(scope_name or type_name, weight_cfg, act_cfg, strategy_cfg)
 
         cur_scope = tf.get_variable_scope()
         # FIXME: I don't know why. The name of layers cannot be uniqued automatically within this context...
         # As a temporary fix, I call unique_name manually here. 
         # As the build of Tensorflow takes time, I will debug this issue later.
         # And call this `unique_name` will result in `Dense` and `Dense_2`, expected `Dense` and `Dense_1`... To be debug...
-        scope_name = tf.get_default_graph().unique_name(name if name else type_name)
-        scope_name = scope_name[scope_name.rfind("/", 1)+1:]
         with tf.variable_scope(scope_name) as s:
             logger.debug("scope name: {}, original name scope: {}".format(s.name, s.original_name_scope))
             #with tf.variable_scope(cur_scope) as s, tf.name_scope(s.original_name_scope):

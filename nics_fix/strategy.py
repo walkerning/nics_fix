@@ -37,35 +37,35 @@ class BaseStrategy(object):
     An abstract strategy interface.
     """
     @abc.abstractmethod
-    def pre_weight(self, input):
+    def pre_weight(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def post_weight(self, input):
+    def post_weight(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def pre_weight_grad(self, input):
+    def pre_weight_grad(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def post_weight_grad(self, input):
+    def post_weight_grad(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def pre_activation(self, input):
+    def pre_activation(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def post_activation(self, input):
+    def post_activation(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def pre_activation_grad(self, input):
+    def pre_activation_grad(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def post_activation_grad(self, input):
+    def post_activation_grad(self, input, sc):
         pass
 
 class Strategy(BaseStrategy):
@@ -74,28 +74,28 @@ class Strategy(BaseStrategy):
     def __init__(self, name, fixed_weight, fixed_activation, cfg):
         pass
 
-    def pre_weight(self, input):
+    def pre_weight(self, input, sc):
         return input
     
-    def post_weight(self, input):
+    def post_weight(self, input, sc):
         return input
 
-    def pre_weight_grad(self, input):
+    def pre_weight_grad(self, input, sc):
         return input
 
-    def post_weight_grad(self, input):
+    def post_weight_grad(self, input, sc):
         return input
 
-    def pre_activation(self, input):
+    def pre_activation(self, input, sc):
         return input
 
-    def post_activation(self, input):
+    def post_activation(self, input, sc):
         return input
 
-    def pre_activation_grad(self, input):
+    def pre_activation_grad(self, input, sc):
         return input
 
-    def post_activation_grad(self, input):
+    def post_activation_grad(self, input, sc):
         return input
 
     @classmethod

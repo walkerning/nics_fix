@@ -11,3 +11,4 @@ from .config import *
 from .strategy import *
 from .strategy_config import *
 from .utils import *
+import strategies
