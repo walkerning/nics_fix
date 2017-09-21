@@ -172,6 +172,9 @@ def main(_):
 
         if FLAGS.train_dir:
             print("Saved model to: ", saver.save(sess, FLAGS.train_dir))
+
+    nf.auto_prune_all([cross_entropy, accuracy, top5_accuracy], {x: x_v, labels: y_v})
+    print("Saved model to: ", saver.save(sess, FLAGS.train_dir + "prune_result"))
     
     # # Load label names to use in prediction results
     # label_list_path = "datasets/cifar-10-batches-py/batches.meta"

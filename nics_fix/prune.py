@@ -4,15 +4,16 @@ from __future__ import print_function
 
 import tensorflow as tf
 import numpy as np
-import json
+import json, copy
 
-__all__ = ["prune", "auto_prune_all", "count_zero"]
+__all__ = ["prune", "auto_prune_all", "count_zero", "prune_all"]
 
 def store(data, file_name='mask.json'):
     with open(file_name, 'w') as json_config:
         json_config.write(json.dumps(data))
 
-def prune(var, ratio, dimenson = [1,1,1,1]):
+def prune(var, ratio, given_dimenson = [1,1,1,1]):
+    dimenson = copy.deepcopy(given_dimenson)
     prune_shape = None
     new_shape = None
     if len(var.shape.as_list()) == 2:
@@ -25,7 +26,7 @@ def prune(var, ratio, dimenson = [1,1,1,1]):
         prune_shape = dimenson
         for index in range(len(prune_shape)):
             if prune_shape[index] == 0:
-                prune_shape[index] = var.shape[index]
+                prune_shape[index] = var.shape.as_list()[index]
         new_shape = var.shape.as_list()
     print("prune layer: " + var.name + " ratio: " + str(ratio) + " dimen: " + str(prune_shape) + " shape: " + str(new_shape))
     data_array = var.eval().flatten()
@@ -66,8 +67,8 @@ def prune(var, ratio, dimenson = [1,1,1,1]):
     tf.get_default_session().run(assign_op)
     return var.name, list(mask_var.eval().flatten())
 
-def auto_prune_all(op, op_dict, thres=0.01, dimenson=[1,1,1,1], mask_file='mask.json'):
-    origin_accu = tf.get_default_session().run(op, feed_dict=op_dict)[0]
+def auto_prune_all(accuracy_func, thres=0.01, dimenson=[1,1,1,1], mask_file='mask.json', result_pos=0):
+    origin_accu = accuracy_func()[result_pos]
     print("origin_accu:",origin_accu)
     var_array = tf.get_default_graph().get_collection("trainable_variables")
     saver = tf.train.Saver(var_array)
@@ -79,7 +80,7 @@ def auto_prune_all(op, op_dict, thres=0.01, dimenson=[1,1,1,1], mask_file='mask.
         for ratio in range(9, 0, -1):
             saver.restore(tf.get_default_session(), "backup_for_prune")
             prune(var, ratio/10., dimenson)
-            result = tf.get_default_session().run(op, feed_dict=op_dict)[0]
+            result = accuracy_func()[result_pos]
             print("result: " + str(result) + " for ratio " + str(ratio / 10.) + ", origin: " + str(origin_accu) + " gap: " + str(origin_accu - result) + ",thresh: " + str(thres))
             if origin_accu - result < thres:
                 ratio_dict[var] = ratio/10.
@@ -92,8 +93,24 @@ def auto_prune_all(op, op_dict, thres=0.01, dimenson=[1,1,1,1], mask_file='mask.
         output_dict[mask_name] = [str(mask_value), str(k.shape.as_list())]
     store(output_dict, mask_file)
 
+def prune_all(ratio_dict, dimenson=[1,1,1,1], mask_file='mask.json', factor=1.0):
+    var_array = tf.get_default_graph().get_collection("trainable_variables")
+    output_dict = {}
+    for (k,v) in ratio_dict.iteritems():
+        print("Finally prune var " + k + " by ratio " + str(v))
+        k_var = None
+        for var in var_array:
+            if var.name == k:
+                k_var = var
+                break
+        mask_name, mask_value = prune(k_var, v*factor, dimenson)
+        output_dict[mask_name] = [str(mask_value), str(k_var.shape.as_list())]
+    store(output_dict, mask_file)
+
 def count_zero():
     var_array = tf.get_default_graph().get_collection("trainable_variables")
+    all_count = 0
+    all_total = 0
     for var in var_array:
         count = 0
         index = 0
@@ -101,6 +118,8 @@ def count_zero():
         for value in value_array:
             if abs(value) < 1e-6:
                 count += 1
-                print("value = 0:",index)
+                all_count += 1
             index += 1
-        print("var: ", var.name, " zero: ", str(count), " total: ", str(reduce(lambda x,y:x*y, var.shape.as_list())))
+        print("var: ", var.name, " zero: ", str(count), " total: ", str(reduce(lambda x,y:x*y, var.shape.as_list())), " ratio: ", str(float(count)/reduce(lambda x,y:x*y, var.shape.as_list())))
+        all_total += reduce(lambda x,y:x*y, var.shape.as_list())
+    print("[All] zero: ", str(all_count), " total: ", str(all_total), " ratio: ", str(float(all_count)/all_total))
