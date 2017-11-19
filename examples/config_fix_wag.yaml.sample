@@ -1,8 +1,23 @@
-by_type:
-  Conv2D:
+configs:
+  fixdata:
+    weight:
+      data_config:
+        bit_width: 4
+        not_training: fixed
+        training: auto
+      gradient_config:
+        training: none
+    activation:
+      data_config:
+        bit_width: 4
+        not_training: fixed
+        training: auto
+      gradient_config:
+        training: none
+  fix:
     weight:
       data_config: 
-        bit_width: 2
+        bit_width: 4
         not_training: fixed
         training: auto
       gradient_config:
@@ -16,20 +31,45 @@ by_type:
       gradient_config:
         bit_width: 8
         training: auto
-  Dense:
-    weight:
-      data_config: 
-        bit_width: 2
-        not_training: fixed
-        training: auto
-      gradient_config:
-        bit_width: 4
-        training: auto
-    activation:
-      data_config:
-        bit_width: 4
-        not_training: fixed
-        training: auto
-      gradient_config:
-        bit_width: 8
-        training: auto
+
+by_name:
+  dense1:
+    config_name: fix
+  dense2:
+    config_name: fixdata
+
+# by_type:
+#   Conv2D:
+#     weight:
+#       data_config: 
+#         bit_width: 2
+#         not_training: fixed
+#         training: auto
+#       gradient_config:
+#         bit_width: 4
+#         training: auto
+#     activation:
+#       data_config:
+#         bit_width: 4
+#         not_training: fixed
+#         training: auto
+#       gradient_config:
+#         bit_width: 8
+#         training: auto
+#   Dense:
+#     weight:
+#       data_config: 
+#         bit_width: 2
+#         not_training: fixed
+#         training: auto
+#       gradient_config:
+#         bit_width: 4
+#         training: auto
+#     activation:
+#       data_config:
+#         bit_width: 4
+#         not_training: fixed
+#         training: auto
+#       gradient_config:
+#         bit_width: 8
+#         training: auto

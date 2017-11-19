@@ -99,15 +99,32 @@ class FixedConfigs(object):
         return weight_cfg, act_cfg
 
     @classmethod
+    def _merge_cfg(cls, cfg, available_cfgs):
+        # TODO: need recursive udpate?
+        fix_cfg = {}
+        if "config_name" in cfg:
+            fix_cfg.update(available_cfgs[cfg["config_name"]])
+        fix_cfg.update(cfg)
+        return fix_cfg
+
+    @classmethod
     def parse_cfg_from_str(cls, cfgstr):
         raw_cfg = yaml.load(cfgstr)
         type_configs = {}
         name_configs = {}
         if raw_cfg is not None:
+            if "configs" in raw_cfg:
+                available_cfgs = raw_cfg["configs"]
             if "by_type" in raw_cfg:
-                type_configs = {type_name: (FixedConfig(**type_cfg.get("weight", _default_weight_config)), FixedConfig(**type_cfg.get("activation", _default_activation_config))) for type_name, type_cfg in raw_cfg["by_type"].iteritems()}
+                type_configs = {}
+                for type_name, type_cfg in raw_cfg["by_type"].iteritems():
+                    type_cfg = cls._merge_cfg(type_cfg, available_cfgs)
+                    type_configs[type_name] = (FixedConfig(**type_cfg.get("weight", _default_weight_config)), FixedConfig(**type_cfg.get("activation", _default_activation_config)))
             if "by_name" in raw_cfg:
-                name_configs = {op_name: (FixedConfig(**op_cfg.get("weight", _default_weight_config)), FixedConfig(**op_cfg.get("activation", _default_activation_config))) for op_name, op_cfg in raw_cfg["by_name"].iteritems()}
+                name_configs = {}
+                for op_name, op_cfg in raw_cfg["by_name"].iteritems():
+                    op_cfg = cls._merge_cfg(op_cfg, available_cfgs)
+                    name_configs[op_name] = (FixedConfig(**op_cfg.get("weight", _default_weight_config)), FixedConfig(**op_cfg.get("activation", _default_activation_config)))
         return cls(type_configs, name_configs)
 
     @classmethod
