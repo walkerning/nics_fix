@@ -33,6 +33,8 @@ configs:
         training: auto
 
 by_name:
+  data:
+    config_name: fixdata
   dense1:
     config_name: fix
   dense2:

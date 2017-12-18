@@ -135,3 +135,5 @@ class FixedConfigs(object):
 
 parse_cfg_from_str = FixedConfigs.parse_cfg_from_str
 parse_cfg_from_file = FixedConfigs.parse_cfg_from_file
+
+FixedConfigs.register_default("data", default_fix_config)

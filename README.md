@@ -22,7 +22,7 @@ We have four things to be quantitized potentially:
 
 For transparent conversion to fixed point simulation, we supply a context manager for managing fixed point configuration: `nics_scope.fixed_scope`, and wrapper of nn operations. Eg. `Dense` for `tf.layers.dense`, `Conv2d` for tf.layers.conv2d.
 
-Using these wrappers inside the context manager, the above four things in the models created will be handled transparently. You can also manually insert `.apply(quantitize)` operation into necessary places.
+Using these wrappers inside the context manager, the above four things in the models created will be handled transparently. You can also manually insert `.apply(quantitize, fix_cfg, name=name)` operation into necessary places.
 
 #### Fixed Config
 

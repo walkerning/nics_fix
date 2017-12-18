@@ -33,7 +33,12 @@ def main(_):
     with nf.fixed_scope("fixed_mlp_mnist", cfgs) as (s, training, fixed_mapping):
         training_placeholder = training
         # Using chaining writing style:
-        res = nf.wrap(x).Dense(units=100, name="dense1").ReLU(name="relu1").Dense(units=10, name="dense2").tensor
+        res = (nf.wrap(x)
+               .apply(lambda x: nf.quantitize(x, cfgs.lookup("data", "data")[1], data_type=nf.DataTypes.ACTIVATION, name="fix_data"))
+               .Dense(units=100, name="dense1")
+               .ReLU(name="relu1")
+               .Dense(units=10, name="dense2")
+               .tensor)
         # Alternatively, you can use the normal writing style:
         # res = nf.Dense(nf.ReLU(nf.Dense(x, units=100)), units=10)
 
