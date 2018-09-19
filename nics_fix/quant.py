@@ -2,11 +2,10 @@
 
 from __future__ import print_function
 
-import logging
-
 import tensorflow as tf
 import numpy as np
 
+from nics_fix.logger import logger
 from nics_fix.context import get_context, TRAINING_PLACEHOLDER_KEY, FIXED_MAPPING_KEY
 from nics_fix.consts import FixedKeys, DataTypes, _get_fixed_key
 from nics_fix.strategy import Strategies
@@ -47,6 +46,7 @@ def _quantitize_data(data, data_fixed_scale, data_cfg, name=None,
     if data_type and data_ori is not None:
         fixed_mapping = get_context(FIXED_MAPPING_KEY)[data_type]
         fixed_mapping.setdefault(data_ori, {})["q_data"] = out_data
+        fixed_mapping[data_ori]["data_cfg"] = data_cfg
     return out_data
 
 def _quantitize_grad(data, grad_fixed_scale, grad_cfg, name=None, pre_grad=None, post_grad=None,
@@ -74,6 +74,7 @@ def _quantitize_grad(data, grad_fixed_scale, grad_cfg, name=None, pre_grad=None,
             input_grad = post_grad(input_grad, grad_fixed_scale)
         if fixed_mapping is not None:
             fixed_mapping.setdefault(data_ori, {})["ori_grad"] = output_grad
+            fixed_mapping[data_ori]["grad_cfg"] = grad_cfg
         return input_grad
 
     G = tf.get_default_graph()
@@ -136,7 +137,7 @@ def quantitize(data, cfg, name=None, scope=None, strategies=None, data_type=Data
             sc.set_custom_getter(None)
             data_basename, ind = _get_basename(data)
             prefix_name = "{}_{}".format(name if name else data_basename, ind)
-            logging.info("Quantitze data {} using cfg: {}".format(prefix_name, cfg))
+            # logger.info("Quantitze data {} using cfg: {}".format(prefix_name, cfg))
             with tf.variable_scope("fixed_scale"):
                 data_fixed_scale = tf.get_variable("data/" + prefix_name, shape=(), dtype=tf.float32,
                                                    trainable=False, initializer=tf.constant_initializer(0))

@@ -13,6 +13,7 @@ from __future__ import print_function
 import os
 import sys
 import time
+import yaml
 import random
 import argparse
 import subprocess
@@ -30,7 +31,7 @@ import nics_fix as nf
 
 FLAGS = None
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+# os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 class RandomCrop():
     def __init__(self, size, padding=0):
@@ -172,6 +173,7 @@ def log(*args, **kwargs):
         sys.stdout.flush()
 
 def main(_):
+    os.environ["CUDA_VISIBLE_DEVICES"] = FLAGS.gpu
     batch_size = FLAGS.batch_size # default to 128
     num_classes = 10
 
@@ -194,23 +196,27 @@ def main(_):
     if FLAGS.cfg is not None:
         cfgs = nf.parse_cfg_from_file(FLAGS.cfg)
     
+    s_cfgs = nf.parse_strategy_cfg_from_str("")
+    if FLAGS.scfg is not None:
+        s_cfgs = nf.parse_strategy_cfg_from_file(FLAGS.scfg)
+
     x = tf.placeholder(tf.float32, shape=[None] + list(x_train.shape[1:]))
     labels = tf.placeholder(tf.float32, [None, num_classes])
     weight_decay = FLAGS.weight_decay
     
-    with nf.fixed_scope("fixed_mlp_mnist", cfgs) as (s, training, fixed_mapping):
+    with nf.fixed_scope("fixed_mlp_mnist", cfgs, s_cfgs) as (s, training, fixed_mapping):
         training_placeholder = training
         # Using chaining writing style:
         logits = globals()[FLAGS.model](x, num_classes, training, weight_decay).tensor
-    
+
     # Construct the fixed saver
-    saver = nf.utils.fixed_model_saver(fixed_mapping)
+    saver = nf.utils.fixed_model_saver(fixed_mapping, max_to_keep=30)
     
     # Loss and metrics
     cross_entropy = tf.reduce_mean(
         tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits))
     reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-    loss = cross_entropy + tf.add_n(reg_losses)
+    loss = cross_entropy + tf.add_n(reg_losses) if reg_losses else cross_entropy
     index_label = tf.argmax(labels, 1)
     correct = tf.equal(tf.argmax(logits, 1), index_label)
     accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
@@ -220,12 +226,46 @@ def main(_):
     # Initialize the optimizer
     global_step = tf.Variable(0, name="global_step", trainable=False)
     # Learning rate is multiplied by 0.5 after training for every 30 epochs
-    learning_rate = tf.train.exponential_decay(0.05, global_step=global_step,
+    learning_rate = tf.train.exponential_decay(FLAGS.start_lr, global_step=global_step,
                                                decay_steps=int(x_train.shape[0] / batch_size * 30),
                                                decay_rate=0.5, staircase=True)
-    optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=0.9)
-    train_step = optimizer.minimize(loss, global_step=global_step)
-    
+    # FIXME: momentum也不能要了...
+    if FLAGS.momentum:
+        optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=0.9)
+        log("INFO: use MomentumOptimizer.")
+    else:
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+        log("INFO: use GradientDescentOptimizer.")
+    grads_and_vars = optimizer.compute_gradients(loss)
+    if FLAGS.prune:
+        train_step = nf.apply_gradients_prune(optimizer.apply_gradients, grads_and_vars, 'mask.json', global_step=global_step)
+        log("INFO: pruning.")
+    else:
+        train_step = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
+        log("INFO: normal train.")
+ 
+    # Scales and summary op
+    weight_tensor_names, weight_data_scales, weight_grad_scales, \
+        weight_data_cfgs, weight_grad_cfgs = zip(*sorted([(k.op.name, v["q_data_scale"], v["q_grad_scale"], v["data_cfg"], v["grad_cfg"])
+                                                          for k, v in fixed_mapping[nf.DataTypes.WEIGHT].iteritems()], key=lambda x: x[0]))
+    weight_data_names = [t.op.name for t in weight_data_scales]
+    weight_grad_names = [t.op.name for t in weight_grad_scales]
+    wd_bit_widths = [c.bit_width for c in weight_data_cfgs]
+    wg_bit_widths = [c.bit_width for c in weight_grad_cfgs]
+    wg_scales_values_min = None
+    wg_scales_values_max = None
+    # Summary weight data/grad scales
+    for t in weight_data_scales:
+        ind = t.op.name.index("/data")
+        summary_name = t.op.name[:ind].replace("/", "_") + t.op.name[ind:]
+        tf.summary.scalar(summary_name, t)
+    for t in weight_grad_scales:
+        ind = t.op.name.index("/grad")
+        summary_name = t.op.name[:ind].replace("/", "_") + t.op.name[ind:]
+        tf.summary.scalar(summary_name, t)
+    summary_op = tf.summary.merge_all()
+    summary_writer = tf.summary.FileWriter(FLAGS.summary_dir)
+
     log("Using real-time data augmentation.")
     # This will do preprocessing and realtime data augmentation:
     datagen_train = ImageDataGenerator(
@@ -257,36 +297,109 @@ def main(_):
     datagen_train.fit(x_train)
     datagen_test.fit(x_test)
     random_crop = RandomCrop(32, 4) # padding 4 and crop 32x32
-    
+    steps_per_epoch = x_train.shape[0] // batch_size
+    total_iters = FLAGS.epochs * steps_per_epoch
+
     config = tf.ConfigProto()
     config.gpu_options.allow_growth=True
     with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
+
+        if FLAGS.load_from is not None:
+            log("Loading checkpoint from {}".format(FLAGS.load_from))
+            saver.restore(sess, tf.train.latest_checkpoint(FLAGS.load_from))
+
         log("Start training...")
         # Training
         gen = MultiProcessGen(datagen_train.flow(x_train, y_train, batch_size=batch_size))
+        iter_ = 0
+        best_top_1 = 0
         try:
-            for epoch in range(1, FLAGS.epochs+1):
+            for epoch in range(0, FLAGS.epochs+1):
                 start_time = time.time()
-                steps_per_epoch = x_train.shape[0] // batch_size
                 loss_v_epoch = 0
                 acc_1_epoch = 0
                 acc_5_epoch = 0
+
+                # Test on the validation set
+                if epoch % FLAGS.test_frequency == 0:
+                    test_gen = MultiProcessGen(datagen_test.flow(x_test, y_test, batch_size=batch_size))
+                    steps_per_epoch_test = x_test.shape[0] // batch_size
+                    loss_test = 0
+                    acc_1_test = 0
+                    acc_5_test = 0
+                    try:
+                        for step in range(1, steps_per_epoch_test+1):
+                            x_v, y_v = next(test_gen)
+                            loss_v, acc_1, acc_5 = sess.run([loss, accuracy, top5_accuracy],
+                                                                         feed_dict={
+                                                                             x: x_v,
+                                                                             labels: y_v
+                                                                         })
+                            print("\r\ttest steps: {}/{}".format(step, steps_per_epoch_test), end="")
+                            loss_test += loss_v
+                            acc_1_test += acc_1
+                            acc_5_test += acc_5
+                        loss_test /= steps_per_epoch_test
+                        acc_1_test /= steps_per_epoch_test
+                        acc_5_test /= steps_per_epoch_test
+                        log("\r\tTest: loss: {}; top1 accuracy: {:.2f} %; top5 accuracy: {:2f} %.".format(loss_test, acc_1_test * 100, acc_5_test * 100), flush=True)
+                    finally:
+                        test_gen.stop()
+                # End test on the validation set
+
+                if FLAGS.train_dir and acc_1_test > best_top_1 and epoch > 0 and epoch % FLAGS.test_frequency == 0:
+                    best_top_1 = acc_1_test
+                    final_wg_scales_values, final_wg_buffer_scales_values = nf.amend_weight_grad_scales(learning_rate, wg_scales_values_min, wg_scales_values_max,
+                                                                                                weight_data_scales, weight_grad_scales, wd_bit_widths, wg_bit_widths,
+                                                                                                grad_buffer_width=FLAGS.grad_buffer_width)
+                    for wtn, gs, wgs_v, wgbs_v in zip(weight_tensor_names, weight_grad_scales, final_wg_scales_values, final_wg_buffer_scales_values):
+                        print("{:40}: final gradient fixed scale: {:>4d}; gradient buffer scale: {:>4d}".format(wtn, int(wgs_v), int(wgbs_v)))
+                        sess.run(tf.assign(gs, wgs_v))
+                    # TODO: dump weight saving buffer strategy by name
+                    if FLAGS.save_strategy:
+                        strategy_config_dct = {
+                            "by_name": {
+                                n.split("/")[-2]: {
+                                    "name": "weightgradsaver_strategy",
+                                    "scale": int(v),
+                                    "bit_width": FLAGS.grad_buffer_width
+                                } for n, v in zip(weight_tensor_names, final_wg_buffer_scales_values)
+                            }
+                        }
+                        with open(FLAGS.save_strategy + str(epoch), "w") as f:
+                            yaml.dump(strategy_config_dct, f)
+                        log("Dump hardware straetgy file to {}".format(FLAGS.save_strategy + str(epoch)))
+
+                    if FLAGS.train_dir:
+                        if not os.path.exists(FLAGS.train_dir):
+                            subprocess.check_call("mkdir -p {}".format(FLAGS.train_dir),
+                                                  shell=True)
+                        log("Saved model to: ", saver.save(sess, os.path.join(FLAGS.train_dir, str(acc_1_test)), global_step=global_step))
 
                 # Train batches
                 for step in range(1, steps_per_epoch+1):
                     # TODO: use another thread to execute the data augumentation and enqueue
                     x_v, y_v = next(gen)
                     x_crop_v = random_crop(x_v)
-                    _, loss_v, acc_1, acc_5 = sess.run([train_step, loss, accuracy, top5_accuracy],
-                                                       feed_dict={
-                                                           x: x_crop_v,
-                                                           labels: y_v
-                                                       })
+                    _, loss_v, acc_1, acc_5, wd_scales_v, wg_scales_v, summary = sess.run([train_step, loss, accuracy, top5_accuracy,
+                                                                                           weight_data_scales, weight_grad_scales, summary_op],
+                                                                                 feed_dict={
+                                                                                     x: x_crop_v,
+                                                                                     labels: y_v
+                                                                                 })
                     print("\rEpoch {}: steps {}/{}".format(epoch, step, steps_per_epoch), end="")
                     loss_v_epoch += loss_v
                     acc_1_epoch += acc_1
                     acc_5_epoch += acc_5
+                    iter_ += 1
+                    if wg_scales_values_min is None:
+                        wg_scales_values_min = np.array(wg_scales_v, dtype=np.int)
+                        wg_scales_values_max = np.array(wg_scales_v, dtype=np.int)
+                    else:
+                        wg_scales_values_min = np.minimum(wg_scales_values_min, wg_scales_v)
+                        wg_scales_values_max = np.maximum(wg_scales_values_max, wg_scales_v)
+                    summary_writer.add_summary(summary, iter_)
 
                 loss_v_epoch /= steps_per_epoch
                 acc_1_epoch /= steps_per_epoch
@@ -298,76 +411,58 @@ def main(_):
                       .format(datetime.now(), epoch, loss_v_epoch, acc_1_epoch * 100, acc_5_epoch * 100, sec_per_batch), flush=True)
                 # End training batches
 
-                # Test on the validation set
-                if epoch % FLAGS.test_frequency == 0:
-                    test_gen = MultiProcessGen(datagen_test.flow(x_test, y_test, batch_size=batch_size))
-                    steps_per_epoch = x_test.shape[0] // batch_size
-                    loss_test = 0
-                    acc_1_test = 0
-                    acc_5_test = 0
-                    try:
-                        for step in range(1, steps_per_epoch+1):
-                            x_v, y_v = next(test_gen)
-                            loss_v, acc_1, acc_5 = sess.run([loss, accuracy, top5_accuracy],
-                                                    feed_dict={
-                                                        x: x_v,
-                                                        labels: y_v
-                                                    })
-                            print("\r\ttest steps: {}/{}".format(step, steps_per_epoch), end="")
-                            loss_test += loss_v
-                            acc_1_test += acc_1
-                            acc_5_test += acc_5
-                        loss_test /= steps_per_epoch
-                        acc_1_test /= steps_per_epoch
-                        acc_5_test /= steps_per_epoch
-                        log("\r\tTest: loss: {}; top1 accuracy: {:.2f} %; top5 accuracy: {:2f} %.".format(loss_test, acc_1_test * 100, acc_5_test * 100), flush=True)
-                    finally:
-                        test_gen.stop()
-                # End test on the validation set
             # End training
         finally:
             gen.stop()
-
-        if FLAGS.train_dir:
-            if not os.path.exists(FLAGS.train_dir):
-                subprocess.check_call("mkdir -p {}".format(FLAGS.train_dir),
-                                      shell=True)
-            log("Saved model to: ", saver.save(sess, FLAGS.train_dir))
+            if FLAGS.prune:
+                print(nf.count_zero())
     
-    # # Load label names to use in prediction results
-    # label_list_path = "datasets/cifar-10-batches-py/batches.meta"
-    # keras_dir = os.path.expanduser(os.path.join("~", ".keras"))
-    # datadir_base = os.path.expanduser(keras_dir)
-    # if not os.access(datadir_base, os.W_OK):
-    #     datadir_base = os.path.join("/tmp", ".keras")
-    # label_list_path = os.path.join(datadir_base, label_list_path)
-    
-    # with open(label_list_path, mode="rb") as f:
-    #     labels = pickle.load(f)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--log_file", type=str, default=None,
                         help="Optional file to write logs to.")
     parser.add_argument("--train_dir", type=str, default="",
-                        help="Directory for storing snapshots")
+                        help="Directory for storing snapshots.")
+    parser.add_argument("--summary_dir", type=str, default="./summary",
+                        help="Directory for storing summarys.")
     parser.add_argument("--model", type=str, default="VGG11",
                         choices=["VGG11", "Conv4Dense2"], help="The network structure.")
     parser.add_argument("--cfg", type=str, default=None,
                         help="The file for fixed configration.")
+    parser.add_argument("--scfg", type=str, default=None,
+                        help="The file for strategy configration.")
+    parser.add_argument("--load-from", type=str, default=None,
+                        help="Finetune from the given model checkpoint.")
+    parser.add_argument("--save-strategy", type=str, default=None,
+                        help="Save the hardware weightgradsaver strategy to this file.")
+
     parser.add_argument("--test_frequency", type=int, default=5,
                         metavar="N", help="Test the accuracies on validation set "
                         "after every N epochs.")
+    parser.add_argument("--weight-grad-iters", type=int, default=100, metavar="WG_ITERS",
+                        help="The weight gradient scales of the last WG_ITERS iterations will be used to calculate the gradient buffer scale.")
+    parser.add_argument("--grad-buffer-width", type=int, default=24,
+                        help="The weight gradient buffer width.")
     parser.add_argument("--epochs", type=int, default=300,
                         help="The max training epochs")
-    parser.add_argument("--batch_size", type=int, default=100,
+    parser.add_argument("--batch_size", type=int, default=128,
                         help="The training/testing batch size.")
+    parser.add_argument("--prune", type=bool, default=False,
+                        help="prune finetune or normal train.")
+    parser.add_argument("--momentum", type=bool, default=True,
+                        help="use MomentumOptimizer or GradientDescentOptimizer.")
+    parser.add_argument("--start_lr", type=float, default=0.05,
+                        help="start learning rate.")
+    parser.add_argument("--gpu", type=str, default="0,1",
+                        help="gpu used to train.")
+
+    # FIXME: weight decay是不是不应该加入了
     parser.add_argument("--weight-decay", type=float, default=5e-4,
                         help="The L2 weight decay parameter.")
-    FLAGS, unparsed = parser.parse_known_args()
+    FLAGS = parser.parse_args()
     if FLAGS.log_file:
         FLAGS.log_file = open(FLAGS.log_file, "w")
     if not FLAGS.train_dir:
         log("WARNING: model will not be saved if `--train_dir` option is not given.")
-    tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+    tf.app.run(main=main, argv=[sys.argv[0]])
 

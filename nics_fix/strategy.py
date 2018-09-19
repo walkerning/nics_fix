@@ -5,10 +5,11 @@ from __future__ import print_function
 import re
 import abc
 import six
-import logging
 
 import tensorflow as tf
 from tensorflow.python.framework.registry import Registry
+
+from nics_fix.logger import logger
 
 __all__ = ["Strategy", "Strategies", "NoiseStrategy"]
 
@@ -27,7 +28,7 @@ class _StrategyMeta(abc.ABCMeta):
         reg_name = _convert_camel2underscore(attrs.get("__registry_name__", name))
         cls = super(_StrategyMeta, mcls).__new__(mcls, name, bases, attrs)
         _strategy_registry.register(cls, reg_name)
-        logging.info("Registering strategy {}, implementation class: {}".format(reg_name, name))
+        logger.info("Registering strategy {}, implementation class: {}".format(reg_name, name))
         return cls
 
 @six.add_metaclass(_StrategyMeta)
@@ -36,35 +37,35 @@ class BaseStrategy(object):
     An abstract strategy interface.
     """
     @abc.abstractmethod
-    def pre_weight(self, input):
+    def pre_weight(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def post_weight(self, input):
+    def post_weight(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def pre_weight_grad(self, input):
+    def pre_weight_grad(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def post_weight_grad(self, input):
+    def post_weight_grad(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def pre_activation(self, input):
+    def pre_activation(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def post_activation(self, input):
+    def post_activation(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def pre_activation_grad(self, input):
+    def pre_activation_grad(self, input, sc):
         pass
 
     @abc.abstractmethod
-    def post_activation_grad(self, input):
+    def post_activation_grad(self, input, sc):
         pass
 
 class Strategy(BaseStrategy):
@@ -73,28 +74,28 @@ class Strategy(BaseStrategy):
     def __init__(self, name, fixed_weight, fixed_activation, cfg):
         pass
 
-    def pre_weight(self, input):
+    def pre_weight(self, input, sc):
         return input
     
-    def post_weight(self, input):
+    def post_weight(self, input, sc):
         return input
 
-    def pre_weight_grad(self, input):
+    def pre_weight_grad(self, input, sc):
         return input
 
-    def post_weight_grad(self, input):
+    def post_weight_grad(self, input, sc):
         return input
 
-    def pre_activation(self, input):
+    def pre_activation(self, input, sc):
         return input
 
-    def post_activation(self, input):
+    def post_activation(self, input, sc):
         return input
 
-    def pre_activation_grad(self, input):
+    def pre_activation_grad(self, input, sc):
         return input
 
-    def post_activation_grad(self, input):
+    def post_activation_grad(self, input, sc):
         return input
 
     @classmethod
@@ -208,7 +209,7 @@ class NoiseStrategy(Strategy):
             elif cfg["type"] == "uniform":
                 t_cfg = NoiseStrategy._default_uniform_strategy.copy()
                 t_cfg.update(cfg)
-                logging.info("NoiseStrategy:{}:{}: `uniform` strategy(min: {}, max: {}) added.".format(name, method_name, 
+                logger.info("NoiseStrategy:{}:{}: `uniform` strategy(min: {}, max: {}) added.".format(name, method_name, 
                                                                                                      t_cfg["min"], t_cfg["max"]))
                 return input + tf.random_uniform(tf.shape(input), t_cfg["min"], t_cfg["max"])
             elif cfg["type"] == "uniform_ratio":
@@ -217,11 +218,11 @@ class NoiseStrategy(Strategy):
                 # Only use strategy at training phase
                 if fixed_cfg.training is None or fixed_cfg.training == "none":
                     # Issue warning
-                    logging.warn(("NoiseStrategy:{}:{}: `uniform_ratio` strategy will have no effect when the fixed configuration"
+                    logger.warn(("NoiseStrategy:{}:{}: `uniform_ratio` strategy will have no effect when the fixed configuration"
                                   "is \"none\".").format(name, method_name))
                     return input
                     
-                logging.info("NoiseStrategy:{}:{}: `uniform_ratio` strategy(min: {}, max: {}) added.".format(name, method_name,
+                logger.info("NoiseStrategy:{}:{}: `uniform_ratio` strategy(min: {}, max: {}) added.".format(name, method_name,
                                                                                                            t_cfg["min"], t_cfg["max"]))
 
                 if isinstance(fixed_cfg.training, int):
@@ -229,7 +230,7 @@ class NoiseStrategy(Strategy):
                 else:
                     if fixed_cfg.training == "auto" and method_name.startswith("pre_"):
                         # FIXME: Will there be a loop caused by control-dependency?
-                        logging.warn(("NoiseStrategy:{}:{}: `uniform_ratio` strategy may have un-intended effect when"
+                        logger.warn(("NoiseStrategy:{}:{}: `uniform_ratio` strategy may have un-intended effect when"
                                       "the fixed configuration is \"auto\", and the applied endpoint is `pre_*`.")\
                                      .format(name, method_name))
                                       

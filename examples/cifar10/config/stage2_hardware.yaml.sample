@@ -1,0 +1,35 @@
+by_type:
+  Conv2D:
+    weight:
+      data_config: 
+        bit_width: 8
+        not_training: fixed
+        training: fixed
+      gradient_config:
+        bit_width: 8
+        training: fixed
+    activation:
+      data_config:
+        bit_width: 8
+        not_training: fixed
+        training: fixed
+      gradient_config:
+        bit_width: 8
+        training: fixed
+  Dense:
+    weight:
+      data_config: 
+        bit_width: 8
+        not_training: fixed
+        training: fixed
+      gradient_config:
+        bit_width: 8
+        training: fixed
+    activation:
+      data_config:
+        bit_width: 8
+        not_training: fixed
+        training: fixed
+      gradient_config:
+        bit_width: 8
+        training: fixed

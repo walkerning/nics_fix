@@ -106,3 +106,5 @@ ENV/
 *.meta
 *.data*
 checkpoint
+
+*.yaml
