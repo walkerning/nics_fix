@@ -244,10 +244,7 @@ def main(_):
     # FIXME: momentum也不能要了...
     optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=0.9)
     grads_and_vars = optimizer.compute_gradients(loss)
-    if FLAGS.prune:
-        train_step = nf.apply_gradients_prune(optimizer.apply_gradients, grads_and_vars, 'mask.json', global_step=global_step)
-    else:
-        train_step = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
+    train_step = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
  
     # Scales and summary op
     weight_tensor_names, weight_data_scales, weight_grad_scales, \
