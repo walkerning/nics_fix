@@ -334,7 +334,7 @@ def main(_):
         if FLAGS.prune == "manual":
             nf.prune_all(prune_rate, dimenson=[0,0,1,1])
         elif FLAGS.prune == "auto":
-            nf.auto_prune_all(accu_func)
+            nf.auto_prune_all(accu_func, result_pos=1)
         print("Saved model to: ", saver.save(sess, os.path.join(FLAGS.train_dir, "prune")))
 
 if __name__ == "__main__":
