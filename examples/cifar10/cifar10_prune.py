@@ -241,7 +241,7 @@ def main(_):
     learning_rate = tf.train.exponential_decay(0.05, global_step=global_step,
                                                decay_steps=int(x_train.shape[0] / batch_size * 30),
                                                decay_rate=0.5, staircase=True)
-    # FIXME: momentum也不能要了...
+    # FIXME: momentum也不能要�?..
     optimizer = tf.train.MomentumOptimizer(learning_rate, momentum=0.9)
     grads_and_vars = optimizer.compute_gradients(loss)
     train_step = optimizer.apply_gradients(grads_and_vars, global_step=global_step)
@@ -327,14 +327,14 @@ def main(_):
                                         })
                 for i in range(len(results_all)):
                     results_all[i] += results[i]
-            print(results_all)
+            # print(results_all)
             for i in range(len(results_all)):
                 results_all[i] /= float(steps_per_epoch)
             return results_all
         if FLAGS.prune == "manual":
-            nf.prune_all(prune_rate, dimenson=[0,0,1,1])
+            nf.prune_all(prune_rate, dimenson=[0,0,1,1], mask_file=FLAGS.mask_file)
         elif FLAGS.prune == "auto":
-            nf.auto_prune_all(accu_func)
+            nf.auto_prune_all(accu_func, dimenson=[0,0,1,1], result_pos = 1, mask_file=FLAGS.mask_file)  # use top1 accuracy for pruning
         print("Saved model to: ", saver.save(sess, os.path.join(FLAGS.train_dir, "prune")))
 
 if __name__ == "__main__":
@@ -371,8 +371,10 @@ if __name__ == "__main__":
                         help="prune finetune or normal train.")
     parser.add_argument("--gpu", type=str, default="0,1",
                         help="gpu used to train.")
+    parser.add_argument("--mask_file", type=str, default="mask.json",
+                        help="file to save the mask matrix")
 
-    # FIXME: weight decay是不是不应该加入了
+    # FIXME: weight decay是不是不应该加入�?
     parser.add_argument("--weight-decay", type=float, default=5e-4,
                         help="The L2 weight decay parameter.")
     FLAGS = parser.parse_args()
